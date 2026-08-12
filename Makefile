@@ -1,4 +1,4 @@
-.PHONY: help setup install run dev clean
+.PHONY: help setup install run dev test clean
 
 PYTHON_VERSION := 3.13.11
 POETRY := pyenv exec poetry
@@ -25,6 +25,9 @@ run: ## Sobe o servidor em http://127.0.0.1:8000
 
 dev: ## Sobe com hot reload
 	$(POETRY) run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+test: ## Roda testes unitarios
+	$(POETRY) run pytest -q
 
 clean: ## Remove .venv, cache e storage
 	-$(POETRY) env remove --all

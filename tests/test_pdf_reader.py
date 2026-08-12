@@ -1,0 +1,36 @@
+from pathlib import Path
+
+import pytest
+
+from app.services.pdf_reader import PdfReader
+
+
+def test_read_meta(sample_pdf: Path):
+    meta = PdfReader().read_meta(sample_pdf)
+    assert meta.page_count == 1
+    assert meta.title == "Sample Title"
+    assert meta.pages[0].width == 300
+    assert meta.pages[0].height == 400
+
+
+def test_read_meta_falls_back_to_stem(tmp_path: Path):
+    import pymupdf
+
+    path = tmp_path / "fallback-name.pdf"
+    doc = pymupdf.open()
+    doc.new_page()
+    doc.save(path)
+    doc.close()
+
+    meta = PdfReader().read_meta(path)
+    assert meta.title == "fallback-name"
+
+
+def test_render_page_returns_png(sample_pdf: Path):
+    png = PdfReader().render_page(sample_pdf, 0, dpi=72)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_render_page_out_of_range(sample_pdf: Path):
+    with pytest.raises(IndexError):
+        PdfReader().render_page(sample_pdf, 99)

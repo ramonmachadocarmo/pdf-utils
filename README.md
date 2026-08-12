@@ -35,6 +35,12 @@ make dev
 
 http://127.0.0.1:8000
 
+## Testes
+
+```bash
+make test
+```
+
 ## API
 
 | Metodo | Rota | Descricao |
