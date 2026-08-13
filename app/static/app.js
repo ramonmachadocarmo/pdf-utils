@@ -77,7 +77,7 @@ function setStatus(text) {
 }
 
 function emptyEdits() {
-  return { strokes: [], texts: [], highlights: [], stamps: [] };
+  return { strokes: [], texts: [], highlights: [], stamps: [], history: [] };
 }
 
 function syncFormatFields() {

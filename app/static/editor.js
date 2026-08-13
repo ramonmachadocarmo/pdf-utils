@@ -7,7 +7,7 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
   let searchHits = [];
 
   function emptyEdits() {
-    return { strokes: [], texts: [], highlights: [], stamps: [] };
+    return { strokes: [], texts: [], highlights: [], stamps: [], history: [] };
   }
 
   function setContentBox(box) {
@@ -20,6 +20,7 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
       texts: structuredClone(next.texts || []),
       highlights: structuredClone(next.highlights || []),
       stamps: structuredClone(next.stamps || []),
+      history: structuredClone(next.history || []),
     };
     redraw();
     onChange?.(edits);
@@ -34,6 +35,12 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
     redraw();
   }
 
+  function commit(type, item) {
+    edits[type].push(item);
+    edits.history.push(type);
+    onChange?.(edits);
+  }
+
   function clear() {
     edits = emptyEdits();
     draft = null;
@@ -42,6 +49,18 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
   }
 
   function undo() {
+    while (edits.history.length) {
+      const type = edits.history[edits.history.length - 1];
+      if (type && edits[type]?.length) {
+        edits.history.pop();
+        edits[type].pop();
+        draft = null;
+        redraw();
+        onChange?.(edits);
+        return;
+      }
+      edits.history.pop();
+    }
     if (edits.stamps.length) edits.stamps.pop();
     else if (edits.texts.length) edits.texts.pop();
     else if (edits.highlights.length) edits.highlights.pop();
@@ -166,21 +185,19 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
     if (tool === "text") {
       const text = window.prompt("Texto:");
       if (!text || !text.trim()) return;
-      edits.texts.push({
+      commit("texts", {
         x: point.x,
         y: point.y,
         text: text.trim(),
         color: getColor(),
         size: 0.03,
       });
-      onChange?.(edits);
       redraw();
       return;
     }
 
     if (tool === "stamp") {
-      edits.stamps.push({ kind: getStampKind(), x: point.x, y: point.y });
-      onChange?.(edits);
+      commit("stamps", { kind: getStampKind(), x: point.x, y: point.y });
       redraw();
       return;
     }
@@ -229,22 +246,20 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
 
     if (draft?.type === "highlight") {
       if (Math.abs(draft.x1 - draft.x0) > 0.005 && Math.abs(draft.y1 - draft.y0) > 0.005) {
-        edits.highlights.push({
+        commit("highlights", {
           x0: draft.x0,
           y0: draft.y0,
           x1: draft.x1,
           y1: draft.y1,
           color: draft.color,
         });
-        onChange?.(edits);
       }
     } else if (draft?.type === "stroke" && draft.points.length >= 2) {
-      edits.strokes.push({
+      commit("strokes", {
         color: draft.color,
         width: draft.width,
         points: draft.points,
       });
-      onChange?.(edits);
     }
 
     draft = null;
