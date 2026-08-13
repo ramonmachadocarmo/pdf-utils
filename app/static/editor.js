@@ -51,6 +51,12 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
   function undo() {
     const type = edits.history.pop();
     if (type && edits[type]?.length) edits[type].pop();
+    else if (!type) {
+      if (edits.stamps.length) edits.stamps.pop();
+      else if (edits.texts.length) edits.texts.pop();
+      else if (edits.highlights.length) edits.highlights.pop();
+      else if (edits.strokes.length) edits.strokes.pop();
+    }
     draft = null;
     redraw();
     onChange?.(edits);
