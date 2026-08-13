@@ -40,7 +40,24 @@ def test_search_finds_text(sample_pdf: Path):
     hits = PdfReader().search(sample_pdf, "hello")
     assert len(hits) >= 1
     assert hits[0].page_index == 0
+    assert hits[0].text.lower().startswith("hello")
     assert hits[0].x1 > hits[0].x0
+
+
+def test_search_returns_matched_text_not_query(tmp_path: Path):
+    import pymupdf
+
+    path = tmp_path / "cased.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=300, height=400)
+    page.insert_text((72, 72), "Hello PDF")
+    doc.save(path)
+    doc.close()
+
+    hits = PdfReader().search(path, "hello")
+    assert len(hits) >= 1
+    assert hits[0].text != "hello"
+    assert "Hello" in hits[0].text
 
 
 def test_search_empty_query(sample_pdf: Path):

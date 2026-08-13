@@ -36,7 +36,7 @@ class PdfReader:
                     hits.append(
                         SearchHit(
                             page_index=page_index,
-                            text=query,
+                            text=page.get_textbox(match).strip() or query,
                             x0=match.x0 / rect.width,
                             y0=match.y0 / rect.height,
                             x1=match.x1 / rect.width,
