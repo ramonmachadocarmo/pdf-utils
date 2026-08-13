@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pymupdf
 
-from app.domain.models import PageInfo, PdfMeta
+from app.domain.models import PageInfo, PdfMeta, SearchHit
 
 
 class PdfReader:
@@ -23,3 +23,24 @@ class PdfReader:
             matrix = pymupdf.Matrix(dpi / 72, dpi / 72)
             pix = page.get_pixmap(matrix=matrix, alpha=False)
             return pix.tobytes("png")
+
+    def search(self, path: Path, query: str) -> list[SearchHit]:
+        query = query.strip()
+        if not query:
+            return []
+        hits: list[SearchHit] = []
+        with pymupdf.open(path) as doc:
+            for page_index, page in enumerate(doc):
+                rect = page.rect
+                for match in page.search_for(query):
+                    hits.append(
+                        SearchHit(
+                            page_index=page_index,
+                            text=query,
+                            x0=match.x0 / rect.width,
+                            y0=match.y0 / rect.height,
+                            x1=match.x1 / rect.width,
+                            y1=match.y1 / rect.height,
+                        )
+                    )
+        return hits

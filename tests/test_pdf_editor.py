@@ -3,23 +3,31 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from app.domain.models import PageStrokes, Point, Stroke
-from app.services.pdf_editor import PdfEditor, _hex_to_rgb
+from app.domain.models import (
+    HighlightBox,
+    PageEdits,
+    Point,
+    StampKind,
+    StampMark,
+    Stroke,
+    TextBox,
+)
+from app.services.pdf_editor import PdfEditor, hex_to_rgb
 
 
 def test_hex_to_rgb():
-    assert _hex_to_rgb("#ff0000") == (1.0, 0.0, 0.0)
-    assert _hex_to_rgb("00ff00") == (0.0, 1.0, 0.0)
+    assert hex_to_rgb("#ff0000") == (1.0, 0.0, 0.0)
+    assert hex_to_rgb("00ff00") == (0.0, 1.0, 0.0)
 
 
 def test_hex_to_rgb_invalid():
     with pytest.raises(ValueError):
-        _hex_to_rgb("#fff")
+        hex_to_rgb("#fff")
 
 
-def test_apply_ink_writes_output(sample_pdf: Path, tmp_path: Path):
+def test_apply_edits_writes_output(sample_pdf: Path, tmp_path: Path):
     out = tmp_path / "inked.pdf"
-    strokes = PageStrokes(
+    strokes = PageEdits(
         page_index=0,
         strokes=(
             Stroke(
@@ -29,23 +37,38 @@ def test_apply_ink_writes_output(sample_pdf: Path, tmp_path: Path):
             ),
         ),
     )
-
-    result = PdfEditor().apply_ink(sample_pdf, [strokes], out)
+    result = PdfEditor().apply_edits(sample_pdf, [strokes], out)
     assert result == out
+    assert out.exists()
+
+
+def test_apply_edits_text_highlight_stamp(sample_pdf: Path, tmp_path: Path):
+    out = tmp_path / "edited.pdf"
+    edits = PageEdits(
+        page_index=0,
+        texts=(TextBox(x=0.2, y=0.3, text="Nota", color="#111111", size=0.04),),
+        highlights=(HighlightBox(0.1, 0.1, 0.5, 0.2, "#f1c40f"),),
+        stamps=(StampMark(StampKind.APPROVED, 0.7, 0.7),),
+    )
+    PdfEditor().apply_edits(sample_pdf, [edits], out)
     assert out.exists()
     assert out.stat().st_size > 0
 
+
+def test_rotate_page(sample_pdf: Path, tmp_path: Path):
+    out = tmp_path / "rotated.pdf"
+    PdfEditor().rotate_page(sample_pdf, 0, 90, out)
     with pymupdf.open(out) as doc:
-        assert len(doc) == 1
+        assert doc[0].rotation % 360 == 90
 
 
-def test_apply_ink_page_out_of_range(sample_pdf: Path, tmp_path: Path):
+def test_apply_edits_page_out_of_range(sample_pdf: Path, tmp_path: Path):
     out = tmp_path / "bad.pdf"
-    strokes = PageStrokes(
+    strokes = PageEdits(
         page_index=5,
         strokes=(
             Stroke(points=(Point(0.1, 0.1), Point(0.2, 0.2)), color="#000000", width=0.01),
         ),
     )
     with pytest.raises(IndexError):
-        PdfEditor().apply_ink(sample_pdf, [strokes], out)
+        PdfEditor().apply_edits(sample_pdf, [strokes], out)

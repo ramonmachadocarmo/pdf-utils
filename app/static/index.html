@@ -12,32 +12,89 @@
 <body>
   <div class="grain" aria-hidden="true"></div>
   <main class="shell">
-    <header class="brand">
+    <header class="brand chrome">
       <p class="mark">PDF Utils</p>
-      <h1>Leia. Risque. Converta.</h1>
-      <p class="lede">PDF com caneta livre, depois exporta para PNG, JPEG, WEBP ou DOCX — tudo local.</p>
+      <h1>Leia. Edite. Converta.</h1>
+      <p class="lede">Zoom, busca, texto, destaque, carimbo e assinatura — tudo local.</p>
     </header>
 
     <section class="workspace" aria-label="Editor">
-      <label class="drop" id="dropzone" for="file-input">
+      <label class="drop chrome" id="dropzone" for="file-input">
         <input id="file-input" type="file" accept="application/pdf,.pdf" hidden />
         <span class="drop-title">Solte o PDF aqui</span>
         <span class="drop-sub">ou clique para escolher</span>
       </label>
 
       <div class="panel" id="panel" hidden>
-        <div class="meta">
-          <div>
-            <p class="meta-label">Arquivo</p>
-            <p class="meta-value" id="file-name">—</p>
+        <div class="top-chrome chrome">
+          <div class="meta">
+            <div>
+              <p class="meta-label">Arquivo</p>
+              <p class="meta-value" id="file-name">—</p>
+            </div>
+            <div>
+              <p class="meta-label">Paginas</p>
+              <p class="meta-value" id="page-count">—</p>
+            </div>
           </div>
-          <div>
-            <p class="meta-label">Páginas</p>
-            <p class="meta-value" id="page-count">—</p>
+          <form id="convert-form" class="controls">
+            <label>
+              Formato
+              <select name="format" id="format">
+                <option value="png">PNG</option>
+                <option value="jpeg">JPEG</option>
+                <option value="webp">WEBP</option>
+                <option value="docx">DOCX</option>
+              </select>
+            </label>
+            <label id="dpi-field">
+              DPI
+              <input type="number" name="dpi" id="dpi" min="72" max="600" value="150" />
+            </label>
+            <label id="quality-field">
+              Qualidade
+              <input type="number" name="quality" id="quality" min="1" max="100" value="90" />
+            </label>
+            <button type="submit" class="cta" id="convert-btn">Converter</button>
+          </form>
+        </div>
+        <p class="status chrome" id="status" role="status"></p>
+
+        <div class="reader-bar chrome">
+          <label class="tool-field grow">
+            Buscar
+            <input type="search" id="search-input" placeholder="texto no PDF" />
+          </label>
+          <button type="button" class="ghost" id="search-btn">Buscar</button>
+          <button type="button" class="ghost" id="search-prev">Anterior</button>
+          <button type="button" class="ghost" id="search-next">Proxima</button>
+          <span class="search-count" id="search-count">0</span>
+          <div class="zoom-cluster">
+            <button type="button" class="ghost icon-btn" id="zoom-out" aria-label="Diminuir zoom">−</button>
+            <span class="zoom-label" id="zoom-label">100%</span>
+            <button type="button" class="ghost icon-btn" id="zoom-in" aria-label="Aumentar zoom">+</button>
           </div>
+          <button type="button" class="ghost" id="rotate-btn">Girar 90°</button>
+          <button type="button" class="ghost" id="night-btn">Noite</button>
+          <button type="button" class="ghost" id="focus-btn">Só visualizar</button>
         </div>
 
-        <div class="toolbar" id="toolbar">
+        <div class="toolbar chrome" id="toolbar">
+          <div class="tool-group" role="toolbar" aria-label="Ferramentas">
+            <button type="button" class="tool active" data-tool="pen">Caneta</button>
+            <button type="button" class="tool" data-tool="highlight">Destaque</button>
+            <button type="button" class="tool" data-tool="text">Texto</button>
+            <button type="button" class="tool" data-tool="signature">Assinatura</button>
+            <div class="stamp-cluster" id="stamp-cluster">
+              <button type="button" class="tool" data-tool="stamp">Carimbo</button>
+              <select id="stamp-kind" aria-label="Tipo de carimbo">
+                <option value="approved">Aprovado</option>
+                <option value="paid">Pago</option>
+                <option value="date">Data</option>
+              </select>
+            </div>
+            <button type="button" class="tool" data-tool="pan">Mão</button>
+          </div>
           <label class="tool-field">
             Cor
             <input type="color" id="pen-color" value="#c0392b" />
@@ -48,45 +105,38 @@
           </label>
           <button type="button" class="ghost" id="undo-stroke">Desfazer</button>
           <button type="button" class="ghost" id="clear-strokes">Limpar</button>
-          <button type="button" class="cta" id="save-ink">Salvar risco</button>
+          <button type="button" class="cta" id="save-ink">Salvar edição</button>
           <button type="button" class="ghost" id="download-pdf">Baixar PDF</button>
         </div>
 
-        <div class="preview-wrap">
-          <button type="button" class="nav" id="prev-page" aria-label="Página anterior">‹</button>
-          <div class="stage" id="stage">
-            <img id="preview" alt="Pré-visualização da página" draggable="false" />
-            <canvas id="draw-layer" aria-label="Camada de desenho"></canvas>
-          </div>
-          <button type="button" class="nav" id="next-page" aria-label="Próxima página">›</button>
+        <div class="focus-bar" id="focus-bar" hidden>
+          <button type="button" class="cta" id="focus-exit">Mostrar interface</button>
+          <button type="button" class="ghost" id="focus-prev">‹</button>
+          <span class="page-chip"><span id="page-current-focus">1</span> / <span id="page-total-focus">1</span></span>
+          <button type="button" class="ghost" id="focus-next">›</button>
+          <button type="button" class="ghost icon-btn" id="focus-zoom-out">−</button>
+          <span class="zoom-label" id="focus-zoom-label">100%</span>
+          <button type="button" class="ghost icon-btn" id="focus-zoom-in">+</button>
         </div>
-        <p class="page-indicator"><span id="page-current">1</span> / <span id="page-total">1</span></p>
 
-        <form id="convert-form" class="controls">
-          <label>
-            Formato
-            <select name="format" id="format">
-              <option value="png">PNG</option>
-              <option value="jpeg">JPEG</option>
-              <option value="webp">WEBP</option>
-              <option value="docx">DOCX</option>
-            </select>
-          </label>
-          <label id="dpi-field">
-            DPI
-            <input type="number" name="dpi" id="dpi" min="72" max="600" value="150" />
-          </label>
-          <label id="quality-field">
-            Qualidade
-            <input type="number" name="quality" id="quality" min="1" max="100" value="90" />
-          </label>
-          <button type="submit" class="cta" id="convert-btn">Converter</button>
-        </form>
-        <p class="status" id="status" role="status"></p>
+        <div class="editor-layout">
+          <aside class="thumbs" id="thumbs" aria-label="Miniaturas"></aside>
+          <div class="preview-wrap">
+            <div class="viewport" id="viewport">
+              <div class="stage" id="stage">
+                <img id="preview" alt="" draggable="false" />
+                <canvas id="draw-layer" aria-label="Camada de edicao"></canvas>
+              </div>
+            </div>
+            <button type="button" class="nav nav-prev" id="prev-page" aria-label="Pagina anterior">‹</button>
+            <button type="button" class="nav nav-next" id="next-page" aria-label="Proxima pagina">›</button>
+            <p class="page-chip overlay chrome"><span id="page-current">1</span> / <span id="page-total">1</span></p>
+          </div>
+        </div>
       </div>
     </section>
   </main>
-  <script src="/static/pen.js"></script>
+  <script src="/static/editor.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -34,3 +34,14 @@ def test_render_page_returns_png(sample_pdf: Path):
 def test_render_page_out_of_range(sample_pdf: Path):
     with pytest.raises(IndexError):
         PdfReader().render_page(sample_pdf, 99)
+
+
+def test_search_finds_text(sample_pdf: Path):
+    hits = PdfReader().search(sample_pdf, "hello")
+    assert len(hits) >= 1
+    assert hits[0].page_index == 0
+    assert hits[0].x1 > hits[0].x0
+
+
+def test_search_empty_query(sample_pdf: Path):
+    assert PdfReader().search(sample_pdf, "   ") == []

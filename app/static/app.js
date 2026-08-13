@@ -2,8 +2,12 @@ const state = {
   jobId: null,
   pageCount: 0,
   pageIndex: 0,
-  strokesByPage: {},
+  editsByPage: {},
   dirtyPages: new Set(),
+  tool: "pen",
+  zoom: 1,
+  searchHits: [],
+  searchCursor: -1,
 };
 
 const dropzone = document.getElementById("dropzone");
@@ -14,6 +18,8 @@ const pageCountEl = document.getElementById("page-count");
 const preview = document.getElementById("preview");
 const canvas = document.getElementById("draw-layer");
 const stage = document.getElementById("stage");
+const viewport = document.getElementById("viewport");
+const thumbs = document.getElementById("thumbs");
 const pageCurrent = document.getElementById("page-current");
 const pageTotal = document.getElementById("page-total");
 const prevBtn = document.getElementById("prev-page");
@@ -26,24 +32,52 @@ const convertBtn = document.getElementById("convert-btn");
 const statusEl = document.getElementById("status");
 const penColor = document.getElementById("pen-color");
 const penWidth = document.getElementById("pen-width");
+const stampCluster = document.getElementById("stamp-cluster");
+const stampKind = document.getElementById("stamp-kind");
+const focusBtn = document.getElementById("focus-btn");
+const focusBar = document.getElementById("focus-bar");
+const focusExit = document.getElementById("focus-exit");
+const focusPrev = document.getElementById("focus-prev");
+const focusNext = document.getElementById("focus-next");
+const focusZoomIn = document.getElementById("focus-zoom-in");
+const focusZoomOut = document.getElementById("focus-zoom-out");
+const focusZoomLabel = document.getElementById("focus-zoom-label");
+const pageCurrentFocus = document.getElementById("page-current-focus");
+const pageTotalFocus = document.getElementById("page-total-focus");
 const undoBtn = document.getElementById("undo-stroke");
 const clearBtn = document.getElementById("clear-strokes");
 const saveInkBtn = document.getElementById("save-ink");
 const downloadPdfBtn = document.getElementById("download-pdf");
+const searchInput = document.getElementById("search-input");
+const searchBtn = document.getElementById("search-btn");
+const searchPrev = document.getElementById("search-prev");
+const searchNext = document.getElementById("search-next");
+const searchCount = document.getElementById("search-count");
+const zoomInBtn = document.getElementById("zoom-in");
+const zoomOutBtn = document.getElementById("zoom-out");
+const zoomLabel = document.getElementById("zoom-label");
+const rotateBtn = document.getElementById("rotate-btn");
+const nightBtn = document.getElementById("night-btn");
 
-const pen = window.PdfPen.createPenController({
+const editor = window.PdfEditorUI.createEditorController({
   canvas,
+  getTool: () => state.tool,
   getColor: () => penColor.value,
   getWidthPx: () => Number(penWidth.value),
-  onChange: (strokes) => {
-    state.strokesByPage[state.pageIndex] = strokes;
-    if (strokes.length) state.dirtyPages.add(state.pageIndex);
+  getStampKind: () => stampKind.value,
+  onChange: (edits) => {
+    state.editsByPage[state.pageIndex] = edits;
+    if (editor.hasEdits(edits)) state.dirtyPages.add(state.pageIndex);
     else state.dirtyPages.delete(state.pageIndex);
   },
 });
 
 function setStatus(text) {
   statusEl.textContent = text;
+}
+
+function emptyEdits() {
+  return { strokes: [], texts: [], highlights: [], stamps: [] };
 }
 
 function syncFormatFields() {
@@ -53,48 +87,110 @@ function syncFormatFields() {
 }
 
 function syncPager() {
-  pageCurrent.textContent = String(state.pageIndex + 1);
-  pageTotal.textContent = String(state.pageCount);
+  const current = String(state.pageIndex + 1);
+  const total = String(state.pageCount);
+  pageCurrent.textContent = current;
+  pageTotal.textContent = total;
+  pageCurrentFocus.textContent = current;
+  pageTotalFocus.textContent = total;
   prevBtn.disabled = state.pageIndex <= 0;
   nextBtn.disabled = state.pageIndex >= state.pageCount - 1;
+  focusPrev.disabled = state.pageIndex <= 0;
+  focusNext.disabled = state.pageIndex >= state.pageCount - 1;
+  thumbs.querySelectorAll("button").forEach((btn) => {
+    btn.classList.toggle("active", Number(btn.dataset.page) === state.pageIndex);
+  });
+}
+
+function syncToolUi() {
+  document.querySelectorAll(".tool").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tool === state.tool);
+  });
+  stampCluster.classList.toggle("is-active", state.tool === "stamp");
+  canvas.style.cursor = state.tool === "pan" ? "grab" : state.tool === "text" ? "text" : "crosshair";
+}
+
+function applyZoom() {
+  stage.style.transform = `scale(${state.zoom})`;
+  stage.style.transformOrigin = "top left";
+  const baseH = preview.offsetHeight || 0;
+  stage.style.height = `${Math.max(baseH * state.zoom, baseH)}px`;
+  const label = `${Math.round(state.zoom * 100)}%`;
+  zoomLabel.textContent = label;
+  focusZoomLabel.textContent = label;
+}
+
+function setFocusMode(on) {
+  document.body.classList.toggle("focus-mode", on);
+  focusBar.hidden = !on;
+  focusBtn.textContent = on ? "Mostrar interface" : "Só visualizar";
+  requestAnimationFrame(() => {
+    fitCanvas();
+  });
 }
 
 function fitCanvas() {
   const rect = stage.getBoundingClientRect();
-  const width = Math.max(1, Math.floor(rect.width));
-  const height = Math.max(1, Math.floor(rect.height));
+  const width = Math.max(1, Math.floor(rect.width / state.zoom));
+  const height = Math.max(1, Math.floor(rect.height / state.zoom));
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
   }
-  const box = window.PdfPen.contentBoxForObjectFitContain(preview, canvas.width, canvas.height);
-  pen.setContentBox(box);
-  pen.redraw();
+  const box = window.PdfEditorUI.contentBoxForObjectFitContain(preview, canvas.width, canvas.height);
+  editor.setContentBox(box);
+  editor.redraw();
 }
 
 function persistCurrentPage() {
-  state.strokesByPage[state.pageIndex] = pen.getStrokes();
+  state.editsByPage[state.pageIndex] = editor.getEdits();
 }
 
-function loadPageStrokes() {
-  pen.setStrokes(state.strokesByPage[state.pageIndex] || []);
+function loadPageEdits() {
+  editor.setEdits(state.editsByPage[state.pageIndex] || emptyEdits());
+  const pageHits = state.searchHits.filter((h) => h.page_index === state.pageIndex);
+  editor.setSearchHits(pageHits);
+}
+
+function renderThumbs() {
+  thumbs.innerHTML = "";
+  for (let i = 0; i < state.pageCount; i += 1) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "thumb";
+    btn.dataset.page = String(i);
+    btn.innerHTML = `<img alt="Pagina ${i + 1}" src="/api/preview/${state.jobId}/${i}?dpi=48&t=${Date.now()}" /><span>${i + 1}</span>`;
+    btn.addEventListener("click", async () => {
+      if (i === state.pageIndex) return;
+      await changePage(i);
+    });
+    thumbs.appendChild(btn);
+  }
 }
 
 async function loadPreview() {
   if (!state.jobId) return;
   await new Promise((resolve, reject) => {
-    preview.onload = () => resolve();
-    preview.onerror = () => reject(new Error("falha ao carregar preview"));
-    preview.src = `/api/preview/${state.jobId}/${state.pageIndex}?dpi=140&t=${Date.now()}`;
+    preview.onload = () => {
+      preview.classList.add("is-ready");
+      resolve();
+    };
+    preview.onerror = () => {
+      preview.classList.remove("is-ready");
+      preview.removeAttribute("src");
+      reject(new Error("falha ao carregar preview"));
+    };
+    preview.src = `/api/preview/${state.jobId}/${state.pageIndex}?dpi=160&t=${Date.now()}`;
   });
   syncPager();
+  applyZoom();
   fitCanvas();
-  loadPageStrokes();
+  loadPageEdits();
 }
 
 async function uploadFile(file) {
   if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
-    setStatus("Selecione um PDF válido.");
+    setStatus("Selecione um PDF valido.");
     return;
   }
 
@@ -113,13 +209,18 @@ async function uploadFile(file) {
   state.jobId = data.job_id;
   state.pageCount = data.page_count;
   state.pageIndex = 0;
-  state.strokesByPage = {};
+  state.editsByPage = {};
   state.dirtyPages = new Set();
+  state.searchHits = [];
+  state.searchCursor = -1;
+  searchCount.textContent = "0";
 
   fileName.textContent = data.filename;
   pageCountEl.textContent = String(data.page_count);
   panel.hidden = false;
-  setStatus("Use o mouse para riscar. Depois salve o risco no PDF.");
+  document.body.classList.add("editing");
+  renderThumbs();
+  setStatus("Ferramentas prontas: caneta, texto, destaque, carimbo, assinatura.");
   await loadPreview();
 }
 
@@ -129,33 +230,82 @@ async function changePage(nextIndex) {
   await loadPreview();
 }
 
+async function runSearch() {
+  if (!state.jobId) return;
+  const q = searchInput.value.trim();
+  if (!q) {
+    state.searchHits = [];
+    state.searchCursor = -1;
+    searchCount.textContent = "0";
+    editor.setSearchHits([]);
+    return;
+  }
+  const res = await fetch(`/api/search/${state.jobId}?q=${encodeURIComponent(q)}`);
+  if (!res.ok) {
+    setStatus("Falha na busca.");
+    return;
+  }
+  const data = await res.json();
+  state.searchHits = data.hits;
+  state.searchCursor = data.hits.length ? 0 : -1;
+  searchCount.textContent = String(data.count);
+  if (state.searchCursor >= 0) await jumpToSearchHit(state.searchCursor);
+  else {
+    editor.setSearchHits([]);
+    setStatus("Nenhum resultado.");
+  }
+}
+
+async function jumpToSearchHit(index) {
+  const hit = state.searchHits[index];
+  if (!hit) return;
+  state.searchCursor = index;
+  searchCount.textContent = `${index + 1}/${state.searchHits.length}`;
+  if (hit.page_index !== state.pageIndex) await changePage(hit.page_index);
+  else {
+    editor.setSearchHits(state.searchHits.filter((h) => h.page_index === state.pageIndex));
+  }
+}
+
 dropzone.addEventListener("dragover", (e) => {
   e.preventDefault();
   dropzone.classList.add("dragover");
 });
-
 dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
-
 dropzone.addEventListener("drop", (e) => {
   e.preventDefault();
   dropzone.classList.remove("dragover");
   uploadFile(e.dataTransfer?.files?.[0]);
 });
-
 fileInput.addEventListener("change", () => uploadFile(fileInput.files?.[0]));
 
 prevBtn.addEventListener("click", async () => {
   if (state.pageIndex <= 0) return;
   await changePage(state.pageIndex - 1);
 });
-
 nextBtn.addEventListener("click", async () => {
   if (state.pageIndex >= state.pageCount - 1) return;
   await changePage(state.pageIndex + 1);
 });
 
-undoBtn.addEventListener("click", () => pen.undo());
-clearBtn.addEventListener("click", () => pen.clear());
+document.querySelectorAll(".tool").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.tool = btn.dataset.tool;
+    syncToolUi();
+  });
+});
+
+stampKind.addEventListener("change", () => {
+  state.tool = "stamp";
+  syncToolUi();
+});
+stampKind.addEventListener("focus", () => {
+  state.tool = "stamp";
+  syncToolUi();
+});
+
+undoBtn.addEventListener("click", () => editor.undo());
+clearBtn.addEventListener("click", () => editor.clear());
 
 saveInkBtn.addEventListener("click", async () => {
   if (!state.jobId) return;
@@ -164,17 +314,17 @@ saveInkBtn.addEventListener("click", async () => {
   const pages = [...state.dirtyPages]
     .map((pageIndex) => ({
       page_index: pageIndex,
-      strokes: state.strokesByPage[pageIndex] || [],
+      ...(state.editsByPage[pageIndex] || emptyEdits()),
     }))
-    .filter((page) => page.strokes.length > 0);
+    .filter((page) => editor.hasEdits(page));
 
   if (!pages.length) {
-    setStatus("Nada para salvar nesta sessão.");
+    setStatus("Nada para salvar nesta sessao.");
     return;
   }
 
   saveInkBtn.disabled = true;
-  setStatus("Gravando risco no PDF…");
+  setStatus("Gravando edicao no PDF…");
   try {
     const res = await fetch(`/api/annotate/${state.jobId}`, {
       method: "POST",
@@ -183,14 +333,14 @@ saveInkBtn.addEventListener("click", async () => {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      setStatus(err.detail || "Falha ao salvar risco.");
+      setStatus(err.detail || "Falha ao salvar.");
       return;
     }
-
-    state.strokesByPage = {};
+    state.editsByPage = {};
     state.dirtyPages = new Set();
+    renderThumbs();
     await loadPreview();
-    setStatus("Risco salvo no PDF.");
+    setStatus("Edicao salva no PDF.");
   } catch {
     setStatus("Erro de rede ao salvar.");
   } finally {
@@ -206,29 +356,107 @@ downloadPdfBtn.addEventListener("click", () => {
   a.click();
 });
 
-formatSelect.addEventListener("change", syncFormatFields);
+searchBtn.addEventListener("click", runSearch);
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    runSearch();
+  }
+});
+searchPrev.addEventListener("click", async () => {
+  if (!state.searchHits.length) return;
+  const next = (state.searchCursor - 1 + state.searchHits.length) % state.searchHits.length;
+  await jumpToSearchHit(next);
+});
+searchNext.addEventListener("click", async () => {
+  if (!state.searchHits.length) return;
+  const next = (state.searchCursor + 1) % state.searchHits.length;
+  await jumpToSearchHit(next);
+});
 
+function bumpZoom(delta) {
+  state.zoom = Math.min(3, Math.max(0.5, state.zoom + delta));
+  applyZoom();
+  fitCanvas();
+}
+
+zoomInBtn.addEventListener("click", () => bumpZoom(0.25));
+zoomOutBtn.addEventListener("click", () => bumpZoom(-0.25));
+focusZoomIn.addEventListener("click", () => bumpZoom(0.25));
+focusZoomOut.addEventListener("click", () => bumpZoom(-0.25));
+focusPrev.addEventListener("click", () => prevBtn.click());
+focusNext.addEventListener("click", () => nextBtn.click());
+focusBtn.addEventListener("click", () => setFocusMode(true));
+focusExit.addEventListener("click", () => setFocusMode(false));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.body.classList.contains("focus-mode")) {
+    setFocusMode(false);
+  }
+});
+
+rotateBtn.addEventListener("click", async () => {
+  if (!state.jobId) return;
+  persistCurrentPage();
+  const res = await fetch(`/api/rotate/${state.jobId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ page_index: state.pageIndex, degrees: 90 }),
+  });
+  if (!res.ok) {
+    setStatus("Falha ao girar pagina.");
+    return;
+  }
+  state.editsByPage[state.pageIndex] = emptyEdits();
+  state.dirtyPages.delete(state.pageIndex);
+  renderThumbs();
+  await loadPreview();
+  setStatus("Pagina girada.");
+});
+
+nightBtn.addEventListener("click", () => {
+  document.body.classList.toggle("night");
+});
+
+let panning = false;
+let panX = 0;
+let panY = 0;
+viewport.addEventListener("pointerdown", (e) => {
+  if (state.tool !== "pan") return;
+  panning = true;
+  panX = e.clientX;
+  panY = e.clientY;
+  viewport.setPointerCapture(e.pointerId);
+  viewport.style.cursor = "grabbing";
+});
+viewport.addEventListener("pointermove", (e) => {
+  if (!panning) return;
+  window.scrollBy(panX - e.clientX, panY - e.clientY);
+  panX = e.clientX;
+  panY = e.clientY;
+});
+viewport.addEventListener("pointerup", () => {
+  panning = false;
+  viewport.style.cursor = "";
+});
+
+formatSelect.addEventListener("change", syncFormatFields);
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!state.jobId) return;
-
   convertBtn.disabled = true;
   setStatus("Convertendo…");
-
   const body = new FormData(form);
   try {
     const res = await fetch(`/api/convert/${state.jobId}`, { method: "POST", body });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      setStatus(err.detail || "Falha na conversão.");
+      setStatus(err.detail || "Falha na conversao.");
       return;
     }
-
     const blob = await res.blob();
     const disposition = res.headers.get("content-disposition") || "";
     const match = /filename="?([^";]+)"?/i.exec(disposition);
     const name = match?.[1] || "converted.bin";
-
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -237,7 +465,7 @@ form.addEventListener("submit", async (e) => {
     URL.revokeObjectURL(url);
     setStatus("Download iniciado.");
   } catch {
-    setStatus("Erro de rede na conversão.");
+    setStatus("Erro de rede na conversao.");
   } finally {
     convertBtn.disabled = false;
   }
@@ -245,3 +473,5 @@ form.addEventListener("submit", async (e) => {
 
 window.addEventListener("resize", fitCanvas);
 syncFormatFields();
+syncToolUi();
+applyZoom();
