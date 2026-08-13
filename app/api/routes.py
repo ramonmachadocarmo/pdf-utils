@@ -5,9 +5,18 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
-from app.api.schemas import AnnotateBody
+from app.api.schemas import AnnotateBody, RotateBody
 from app.config import OUTPUTS, UPLOADS
-from app.domain.models import ConversionRequest, OutputFormat, PageStrokes, Point, Stroke
+from app.domain.models import (
+    ConversionRequest,
+    HighlightBox,
+    OutputFormat,
+    PageEdits,
+    Point,
+    StampMark,
+    Stroke,
+    TextBox,
+)
 from app.services.converter import ConversionService
 from app.services.pdf_editor import PdfEditor
 from app.services.pdf_reader import PdfReader
@@ -40,6 +49,11 @@ def _pdf_path(job_id: str) -> Path:
     working = UPLOADS / job_id / "working.pdf"
     source = UPLOADS / job_id / "source.pdf"
     return working if working.exists() else source
+
+
+def _replace_working(job_id: str, tmp_path: Path) -> None:
+    working = UPLOADS / job_id / "working.pdf"
+    tmp_path.replace(working)
 
 
 @router.post("/upload")
@@ -82,6 +96,29 @@ async def preview(job_id: str, page_index: int, dpi: int = 120):
     return Response(content=png, media_type="image/png")
 
 
+@router.get("/search/{job_id}")
+async def search(job_id: str, q: str = ""):
+    pdf_path = _pdf_path(job_id)
+    if not pdf_path.exists():
+        raise HTTPException(404, "job nao encontrado")
+    hits = reader.search(pdf_path, q)
+    return {
+        "query": q,
+        "count": len(hits),
+        "hits": [
+            {
+                "page_index": h.page_index,
+                "text": h.text,
+                "x0": h.x0,
+                "y0": h.y0,
+                "x1": h.x1,
+                "y1": h.y1,
+            }
+            for h in hits
+        ],
+    }
+
+
 @router.post("/annotate/{job_id}")
 async def annotate(job_id: str, body: AnnotateBody):
     pdf_path = _pdf_path(job_id)
@@ -89,7 +126,7 @@ async def annotate(job_id: str, body: AnnotateBody):
         raise HTTPException(404, "job nao encontrado")
 
     pages = [
-        PageStrokes(
+        PageEdits(
             page_index=page.page_index,
             strokes=tuple(
                 Stroke(
@@ -99,15 +136,35 @@ async def annotate(job_id: str, body: AnnotateBody):
                 )
                 for stroke in page.strokes
             ),
+            texts=tuple(
+                TextBox(
+                    x=t.x,
+                    y=t.y,
+                    text=t.text,
+                    color=t.color,
+                    size=t.size,
+                )
+                for t in page.texts
+            ),
+            highlights=tuple(
+                HighlightBox(
+                    x0=h.x0,
+                    y0=h.y0,
+                    x1=h.x1,
+                    y1=h.y1,
+                    color=h.color,
+                )
+                for h in page.highlights
+            ),
+            stamps=tuple(StampMark(kind=s.kind, x=s.x, y=s.y) for s in page.stamps),
         )
         for page in body.pages
     ]
 
-    working = UPLOADS / job_id / "working.pdf"
     tmp_path = UPLOADS / job_id / "working.tmp.pdf"
     try:
-        editor.apply_ink(pdf_path, pages, tmp_path)
-        tmp_path.replace(working)
+        editor.apply_edits(pdf_path, pages, tmp_path)
+        _replace_working(job_id, tmp_path)
     except (IndexError, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
@@ -116,6 +173,27 @@ async def annotate(job_id: str, body: AnnotateBody):
         tmp_path.unlink(missing_ok=True)
 
     return {"ok": True, "job_id": job_id}
+
+
+@router.post("/rotate/{job_id}")
+async def rotate(job_id: str, body: RotateBody):
+    pdf_path = _pdf_path(job_id)
+    if not pdf_path.exists():
+        raise HTTPException(404, "job nao encontrado")
+
+    tmp_path = UPLOADS / job_id / "working.tmp.pdf"
+    try:
+        editor.rotate_page(pdf_path, body.page_index, body.degrees, tmp_path)
+        _replace_working(job_id, tmp_path)
+    except (IndexError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, f"falha ao rotacionar: {exc}") from exc
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    meta = reader.read_meta(_pdf_path(job_id))
+    return {"ok": True, "page_count": meta.page_count}
 
 
 @router.get("/download/{job_id}")

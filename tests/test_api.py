@@ -75,6 +75,13 @@ def test_annotate_and_download(sample_pdf: Path):
                             "points": [{"x": 0.1, "y": 0.1}, {"x": 0.8, "y": 0.8}],
                         }
                     ],
+                    "texts": [
+                        {"x": 0.2, "y": 0.4, "text": "ok", "color": "#000000", "size": 0.03}
+                    ],
+                    "highlights": [
+                        {"x0": 0.1, "y0": 0.1, "x1": 0.4, "y1": 0.2, "color": "#f1c40f"}
+                    ],
+                    "stamps": [{"kind": "approved", "x": 0.7, "y": 0.7}],
                 }
             ]
         },
@@ -85,3 +92,40 @@ def test_annotate_and_download(sample_pdf: Path):
     dl = client.get(f"/api/download/{job_id}")
     assert dl.status_code == 200
     assert dl.headers["content-type"] == "application/pdf"
+
+
+def test_search_and_rotate(sample_pdf: Path):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    search = client.get(f"/api/search/{job_id}", params={"q": "hello"})
+    assert search.status_code == 200
+    assert search.json()["count"] >= 1
+
+    rotated = client.post(
+        f"/api/rotate/{job_id}",
+        json={"page_index": 0, "degrees": 90},
+    )
+    assert rotated.status_code == 200
+    assert rotated.json()["ok"] is True
+
+
+def test_convert_png(sample_pdf: Path):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    res = client.post(
+        f"/api/convert/{job_id}",
+        data={"format": "png", "dpi": "72", "quality": "90"},
+    )
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("image/png")
+
+
+def test_index_page():
+    res = client.get("/")
+    assert res.status_code == 200
+    assert b"PDF Utils" in res.content
+    assert b"Pre-visualizacao da pagina" not in res.content

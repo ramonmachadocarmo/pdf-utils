@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "pdf-utils"
 version = "1.0.0"
-description = "PDF reader, ink editor and converter (PNG, JPEG, WEBP, DOCX)"
+description = "PDF reader, editor and converter (PNG, JPEG, WEBP, DOCX)"
 authors = ["Ramon"]
 readme = "README.md"
 packages = [{ include = "app" }]

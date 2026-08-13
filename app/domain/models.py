@@ -9,6 +9,12 @@ class OutputFormat(StrEnum):
     DOCX = "docx"
 
 
+class StampKind(StrEnum):
+    APPROVED = "approved"
+    PAID = "paid"
+    DATE = "date"
+
+
 @dataclass(frozen=True)
 class ConversionRequest:
     format: OutputFormat
@@ -44,6 +50,44 @@ class Stroke:
 
 
 @dataclass(frozen=True)
-class PageStrokes:
+class TextBox:
+    x: float
+    y: float
+    text: str
+    color: str
+    size: float
+
+
+@dataclass(frozen=True)
+class HighlightBox:
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    color: str
+
+
+@dataclass(frozen=True)
+class StampMark:
+    kind: StampKind
+    x: float
+    y: float
+
+
+@dataclass(frozen=True)
+class PageEdits:
     page_index: int
-    strokes: tuple[Stroke, ...]
+    strokes: tuple[Stroke, ...] = ()
+    texts: tuple[TextBox, ...] = ()
+    highlights: tuple[HighlightBox, ...] = ()
+    stamps: tuple[StampMark, ...] = ()
+
+
+@dataclass(frozen=True)
+class SearchHit:
+    page_index: int
+    text: str
+    x0: float
+    y0: float
+    x1: float
+    y1: float
