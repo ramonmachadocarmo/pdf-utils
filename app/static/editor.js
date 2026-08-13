@@ -22,14 +22,6 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
       stamps: structuredClone(next.stamps || []),
       history: structuredClone(next.history || []),
     };
-    if (!edits.history.length) {
-      edits.history = [
-        ...edits.strokes.map(() => "strokes"),
-        ...edits.highlights.map(() => "highlights"),
-        ...edits.texts.map(() => "texts"),
-        ...edits.stamps.map(() => "stamps"),
-      ];
-    }
     redraw();
     onChange?.(edits);
   }
