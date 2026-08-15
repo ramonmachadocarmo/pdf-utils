@@ -16,7 +16,7 @@ from app.domain.models import (
 def hex_to_rgb(color: str) -> tuple[float, float, float]:
     value = color.removeprefix("#").strip()
     if len(value) != 6:
-        raise ValueError(f"cor invalida: {color}")
+        raise ValueError(f"invalid color: {color}")
     r = int(value[0:2], 16) / 255
     g = int(value[2:4], 16) / 255
     b = int(value[4:6], 16) / 255
@@ -24,8 +24,8 @@ def hex_to_rgb(color: str) -> tuple[float, float, float]:
 
 
 _STAMP_LABELS = {
-    StampKind.APPROVED: "APROVADO",
-    StampKind.PAID: "PAGO",
+    StampKind.APPROVED: "APPROVED",
+    StampKind.PAID: "PAID",
     StampKind.DATE: None,
 }
 
@@ -47,7 +47,7 @@ class PdfEditor:
 
     def rotate_page(self, pdf_path: Path, page_index: int, degrees: int, out_path: Path) -> Path:
         if degrees not in (90, 180, 270, -90):
-            raise ValueError("degrees deve ser 90, 180, 270 ou -90")
+            raise ValueError("degrees must be 90, 180, 270, or -90")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with pymupdf.open(pdf_path) as doc:
             if page_index < 0 or page_index >= len(doc):

@@ -62,6 +62,28 @@ def test_rotate_page(sample_pdf: Path, tmp_path: Path):
         assert doc[0].rotation % 360 == 90
 
 
+def test_rotate_invalid_degrees(sample_pdf: Path, tmp_path: Path):
+    with pytest.raises(ValueError, match="degrees must be"):
+        PdfEditor().rotate_page(sample_pdf, 0, 45, tmp_path / "bad.pdf")
+
+
+def test_rotate_page_out_of_range(sample_pdf: Path, tmp_path: Path):
+    with pytest.raises(IndexError):
+        PdfEditor().rotate_page(sample_pdf, 3, 90, tmp_path / "bad.pdf")
+
+
+def test_apply_edits_skips_noop_shapes(sample_pdf: Path, tmp_path: Path):
+    out = tmp_path / "noop.pdf"
+    edits = PageEdits(
+        page_index=0,
+        strokes=(Stroke(points=(Point(0.1, 0.1),), color="#000000", width=0.01),),
+        texts=(TextBox(x=0.2, y=0.3, text="   ", color="#111111", size=0.04),),
+        highlights=(HighlightBox(0.1, 0.1, 0.1005, 0.1005, "#f1c40f"),),
+        stamps=(StampMark(StampKind.DATE, 0.5, 0.5), StampMark(StampKind.PAID, 0.6, 0.6)),
+    )
+    PdfEditor().apply_edits(sample_pdf, [edits], out)
+    assert out.exists()
+
 def test_apply_edits_page_out_of_range(sample_pdf: Path, tmp_path: Path):
     out = tmp_path / "bad.pdf"
     strokes = PageEdits(

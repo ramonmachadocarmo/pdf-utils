@@ -146,8 +146,8 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
       stamp.kind === "date"
         ? new Date().toISOString().slice(0, 10)
         : stamp.kind === "paid"
-          ? "PAGO"
-          : "APROVADO";
+          ? t("stamp.label.paid")
+          : t("stamp.label.approved");
     const cx = content.left + stamp.x * content.width;
     const cy = content.top + stamp.y * content.height;
     ctx.save();
@@ -183,7 +183,7 @@ function createEditorController({ canvas, getTool, getColor, getWidthPx, getStam
     if (!point) return;
 
     if (tool === "text") {
-      const text = window.prompt("Texto:");
+      const text = window.prompt(t("prompt.text"));
       if (!text || !text.trim()) return;
       commit("texts", {
         x: point.x,

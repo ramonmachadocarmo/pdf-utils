@@ -46,7 +46,7 @@ class PageEditsIn(BaseModel):
     @model_validator(mode="after")
     def require_edits(self):
         if not (self.strokes or self.texts or self.highlights or self.stamps):
-            raise ValueError("pagina sem edicoes")
+            raise ValueError("page has no edits")
         return self
 
 

@@ -33,3 +33,4 @@ node_modules/
 package.json
 package-lock.json
 docs/screenshots/demo.pdf
+scripts/

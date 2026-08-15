@@ -128,4 +128,4 @@ def test_index_page():
     res = client.get("/")
     assert res.status_code == 200
     assert b"PDF Utils" in res.content
-    assert b"Pre-visualizacao da pagina" not in res.content
+    assert b'data-i18n="home.headline"' in res.content

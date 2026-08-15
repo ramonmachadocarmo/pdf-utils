@@ -59,7 +59,7 @@ def _replace_working(job_id: str, tmp_path: Path) -> None:
 @router.post("/upload")
 async def upload(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "envie um arquivo PDF")
+        raise HTTPException(400, "send a PDF file")
 
     job_id = uuid.uuid4().hex
     upload_dir, _ = _job_dirs(job_id)
@@ -86,7 +86,7 @@ async def upload(file: UploadFile = File(...)):
 async def preview(job_id: str, page_index: int, dpi: int = 120):
     pdf_path = _pdf_path(job_id)
     if not pdf_path.exists():
-        raise HTTPException(404, "job nao encontrado")
+        raise HTTPException(404, "job not found")
 
     try:
         png = reader.render_page(pdf_path, page_index, dpi=dpi)
@@ -100,7 +100,7 @@ async def preview(job_id: str, page_index: int, dpi: int = 120):
 async def search(job_id: str, q: str = ""):
     pdf_path = _pdf_path(job_id)
     if not pdf_path.exists():
-        raise HTTPException(404, "job nao encontrado")
+        raise HTTPException(404, "job not found")
     hits = reader.search(pdf_path, q)
     return {
         "query": q,
@@ -123,7 +123,7 @@ async def search(job_id: str, q: str = ""):
 async def annotate(job_id: str, body: AnnotateBody):
     pdf_path = _pdf_path(job_id)
     if not pdf_path.exists():
-        raise HTTPException(404, "job nao encontrado")
+        raise HTTPException(404, "job not found")
 
     pages = [
         PageEdits(
@@ -168,7 +168,7 @@ async def annotate(job_id: str, body: AnnotateBody):
     except (IndexError, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(500, f"falha ao anotar: {exc}") from exc
+        raise HTTPException(500, f"failed to annotate: {exc}") from exc
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -179,7 +179,7 @@ async def annotate(job_id: str, body: AnnotateBody):
 async def rotate(job_id: str, body: RotateBody):
     pdf_path = _pdf_path(job_id)
     if not pdf_path.exists():
-        raise HTTPException(404, "job nao encontrado")
+        raise HTTPException(404, "job not found")
 
     tmp_path = UPLOADS / job_id / "working.tmp.pdf"
     try:
@@ -188,7 +188,7 @@ async def rotate(job_id: str, body: RotateBody):
     except (IndexError, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(500, f"falha ao rotacionar: {exc}") from exc
+        raise HTTPException(500, f"failed to rotate: {exc}") from exc
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -200,7 +200,7 @@ async def rotate(job_id: str, body: RotateBody):
 async def download(job_id: str):
     pdf_path = _pdf_path(job_id)
     if not pdf_path.exists():
-        raise HTTPException(404, "job nao encontrado")
+        raise HTTPException(404, "job not found")
     return FileResponse(pdf_path, media_type="application/pdf", filename="edited.pdf")
 
 
@@ -213,17 +213,17 @@ async def convert(
 ):
     pdf_path = _pdf_path(job_id)
     if not pdf_path.exists():
-        raise HTTPException(404, "job nao encontrado")
+        raise HTTPException(404, "job not found")
 
     try:
         output_format = OutputFormat(format.lower())
     except ValueError as exc:
-        raise HTTPException(400, "formato invalido") from exc
+        raise HTTPException(400, "invalid format") from exc
 
     if dpi < 72 or dpi > 600:
-        raise HTTPException(400, "dpi deve estar entre 72 e 600")
+        raise HTTPException(400, "dpi must be between 72 and 600")
     if quality < 1 or quality > 100:
-        raise HTTPException(400, "quality deve estar entre 1 e 100")
+        raise HTTPException(400, "quality must be between 1 and 100")
 
     out_dir = OUTPUTS / job_id / "convert"
     if out_dir.exists():
@@ -233,7 +233,7 @@ async def convert(
     try:
         result = converter.convert(pdf_path, out_dir, request)
     except Exception as exc:
-        raise HTTPException(500, f"falha na conversao: {exc}") from exc
+        raise HTTPException(500, f"conversion failed: {exc}") from exc
 
     media = _MEDIA_TYPES.get(result.suffix.lower(), "application/octet-stream")
     return FileResponse(result, media_type=media, filename=result.name)

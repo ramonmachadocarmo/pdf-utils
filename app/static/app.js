@@ -123,7 +123,7 @@ function applyZoom() {
 function setFocusMode(on) {
   document.body.classList.toggle("focus-mode", on);
   focusBar.hidden = !on;
-  focusBtn.textContent = on ? "Mostrar interface" : "Só visualizar";
+  focusBtn.textContent = on ? t("focus.toggle.off") : t("focus.toggle.on");
   requestAnimationFrame(() => {
     fitCanvas();
   });
@@ -159,7 +159,7 @@ function renderThumbs() {
     btn.type = "button";
     btn.className = "thumb";
     btn.dataset.page = String(i);
-    btn.innerHTML = `<img alt="Pagina ${i + 1}" src="/api/preview/${state.jobId}/${i}?dpi=48&t=${Date.now()}" /><span>${i + 1}</span>`;
+    btn.innerHTML = `<img alt="${t("thumb.alt", { n: i + 1 })}" src="/api/preview/${state.jobId}/${i}?dpi=48&t=${Date.now()}" /><span>${i + 1}</span>`;
     btn.addEventListener("click", async () => {
       if (i === state.pageIndex) return;
       await changePage(i);
@@ -178,7 +178,7 @@ async function loadPreview() {
     preview.onerror = () => {
       preview.classList.remove("is-ready");
       preview.removeAttribute("src");
-      reject(new Error("falha ao carregar preview"));
+      reject(new Error(t("status.preview_failed")));
     };
     preview.src = `/api/preview/${state.jobId}/${state.pageIndex}?dpi=160&t=${Date.now()}`;
   });
@@ -190,18 +190,18 @@ async function loadPreview() {
 
 async function uploadFile(file) {
   if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
-    setStatus("Selecione um PDF valido.");
+    setStatus(t("status.select_pdf"));
     return;
   }
 
-  setStatus("Enviando…");
+  setStatus(t("status.uploading"));
   const body = new FormData();
   body.append("file", file);
 
   const res = await fetch("/api/upload", { method: "POST", body });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    setStatus(err.detail || "Falha no upload.");
+    setStatus(err.detail || t("status.upload_failed"));
     return;
   }
 
@@ -220,7 +220,7 @@ async function uploadFile(file) {
   panel.hidden = false;
   document.body.classList.add("editing");
   renderThumbs();
-  setStatus("Ferramentas prontas: caneta, texto, destaque, carimbo, assinatura.");
+  setStatus(t("status.tools_ready"));
   await loadPreview();
 }
 
@@ -242,7 +242,7 @@ async function runSearch() {
   }
   const res = await fetch(`/api/search/${state.jobId}?q=${encodeURIComponent(q)}`);
   if (!res.ok) {
-    setStatus("Falha na busca.");
+    setStatus(t("status.search_failed"));
     return;
   }
   const data = await res.json();
@@ -252,7 +252,7 @@ async function runSearch() {
   if (state.searchCursor >= 0) await jumpToSearchHit(state.searchCursor);
   else {
     editor.setSearchHits([]);
-    setStatus("Nenhum resultado.");
+    setStatus(t("status.search_empty"));
   }
 }
 
@@ -319,12 +319,12 @@ saveInkBtn.addEventListener("click", async () => {
     .filter((page) => editor.hasEdits(page));
 
   if (!pages.length) {
-    setStatus("Nada para salvar nesta sessao.");
+    setStatus(t("status.nothing_to_save"));
     return;
   }
 
   saveInkBtn.disabled = true;
-  setStatus("Gravando edicao no PDF…");
+  setStatus(t("status.saving"));
   try {
     const res = await fetch(`/api/annotate/${state.jobId}`, {
       method: "POST",
@@ -333,16 +333,16 @@ saveInkBtn.addEventListener("click", async () => {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      setStatus(err.detail || "Falha ao salvar.");
+      setStatus(err.detail || t("status.save_failed"));
       return;
     }
     state.editsByPage = {};
     state.dirtyPages = new Set();
     renderThumbs();
     await loadPreview();
-    setStatus("Edicao salva no PDF.");
+    setStatus(t("status.saved"));
   } catch {
-    setStatus("Erro de rede ao salvar.");
+    setStatus(t("status.save_network"));
   } finally {
     saveInkBtn.disabled = false;
   }
@@ -403,14 +403,14 @@ rotateBtn.addEventListener("click", async () => {
     body: JSON.stringify({ page_index: state.pageIndex, degrees: 90 }),
   });
   if (!res.ok) {
-    setStatus("Falha ao girar pagina.");
+    setStatus(t("status.rotate_failed"));
     return;
   }
   state.editsByPage[state.pageIndex] = emptyEdits();
   state.dirtyPages.delete(state.pageIndex);
   renderThumbs();
   await loadPreview();
-  setStatus("Pagina girada.");
+  setStatus(t("status.rotated"));
 });
 
 nightBtn.addEventListener("click", () => {
@@ -444,13 +444,13 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!state.jobId) return;
   convertBtn.disabled = true;
-  setStatus("Convertendo…");
+  setStatus(t("status.converting"));
   const body = new FormData(form);
   try {
     const res = await fetch(`/api/convert/${state.jobId}`, { method: "POST", body });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      setStatus(err.detail || "Falha na conversao.");
+      setStatus(err.detail || t("status.convert_failed"));
       return;
     }
     const blob = await res.blob();
@@ -463,15 +463,34 @@ form.addEventListener("submit", async (e) => {
     a.download = name;
     a.click();
     URL.revokeObjectURL(url);
-    setStatus("Download iniciado.");
+    setStatus(t("status.download_started"));
   } catch {
-    setStatus("Erro de rede na conversao.");
+    setStatus(t("status.convert_network"));
   } finally {
     convertBtn.disabled = false;
   }
 });
 
 window.addEventListener("resize", fitCanvas);
-syncFormatFields();
-syncToolUi();
-applyZoom();
+
+document.getElementById("lang-select")?.addEventListener("change", async (e) => {
+  await window.I18n.load(e.target.value);
+  if (document.body.classList.contains("focus-mode")) {
+    focusBtn.textContent = t("focus.toggle.off");
+  }
+  if (state.jobId) renderThumbs();
+  editor.redraw();
+});
+
+document.addEventListener("i18n:changed", () => {
+  if (document.body.classList.contains("focus-mode")) {
+    focusBtn.textContent = t("focus.toggle.off");
+  }
+});
+
+(async () => {
+  await window.I18n.load(window.I18n.detect());
+  syncFormatFields();
+  syncToolUi();
+  applyZoom();
+})();
