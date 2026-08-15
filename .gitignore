@@ -27,3 +27,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Screenshot tooling (local only)
+node_modules/
+package.json
+package-lock.json
+docs/screenshots/demo.pdf
