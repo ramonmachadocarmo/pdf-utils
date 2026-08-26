@@ -14,6 +14,12 @@ Everything runs on your machine — files are not uploaded to the cloud.
 
 UI languages: **English**, **Portuguese (BR)**, **Spanish**.
 
+## Download (Windows)
+
+Grab the latest installer from [**Releases**](https://github.com/ramonmachadocarmo/pdf-utils/releases/latest) — `PDF-Utils-Setup.exe`. No Python, no `make`, nothing else to install.
+
+The app is unsigned, so Windows SmartScreen will show an "unrecognized publisher" warning on first run — click **More info → Run anyway**.
+
 ## Screenshots
 
 ![Home](docs/screenshots/home.png)
@@ -89,6 +95,8 @@ make install  # create .venv and install dependencies
 - **PyMuPDF** — read, preview, search, annotate, rotate
 - **pdf2docx** — DOCX export
 - **Pillow** — image formats
+- **pywebview** — native desktop window (Windows)
+- **PyInstaller** — standalone `.exe` build (dev only)
 
 ### Local storage
 
@@ -111,6 +119,24 @@ make run    # server without reload
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 Interactive API docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
+### Desktop app (Windows)
+
+The same app can run in a native desktop window instead of a browser tab, via [pywebview](https://pywebview.flowrl.com/) (WebView2 backend).
+
+```bash
+make desktop        # run the desktop window (needs make install)
+make build-windows  # build dist\PDF Utils.exe — standalone, no Python required
+make installer      # build installer_output\PDF-Utils-Setup.exe — needs Inno Setup
+```
+
+`PDF Utils.exe` bundles Python, the server, and the UI into a single file. Double-click it to launch — no install step, no browser.
+
+`PDF-Utils-Setup.exe` wraps that into a normal Windows installer: Start Menu shortcut, optional Desktop icon, and an uninstaller, via [Inno Setup](https://jrsoftware.org/isinfo.php) (`installer.iss`). Install it from <https://jrsoftware.org/isdl.php> to build the installer locally — end users only need the resulting `PDF-Utils-Setup.exe`, not Inno Setup itself.
+
+### Update checks
+
+On launch, the UI calls `GET /api/update-check`, which asks the GitHub Releases API for the latest published tag and compares it to the running version (`app/config.py:APP_VERSION`). If a newer version exists, a small **Update available** pill appears next to the headline, linking straight to the release's `.exe` asset (falls back to the release page if no `.exe` is attached). No network access, no GitHub release yet, or a rate-limited request all fail silently — the app just doesn't show the banner.
 
 ## Using the UI
 
@@ -174,13 +200,17 @@ curl -X POST "http://127.0.0.1:8000/api/convert/<job_id>" \
 app/
   api/          # routes and schemas
   domain/       # domain models
-  services/     # reader, editor, converter
+  services/     # reader, editor, converter, update checker
   static/       # UI + i18n locales
-  config.py     # paths (storage, static)
+  config.py     # paths, app version (storage, static)
   main.py       # FastAPI app
+  desktop.py    # native window entry point (pywebview)
 docs/screenshots/
 tests/
-storage/        # uploads and outputs (runtime)
+storage/                      # uploads and outputs (runtime)
+pdf-utils.spec                # PyInstaller build spec
+installer.iss                 # Inno Setup installer script
+.github/workflows/release.yml # build + publish installer on tag push
 ```
 
 ## Make commands
@@ -191,9 +221,25 @@ make setup     Python + Poetry
 make install   Dependencies in .venv
 make run       Server
 make dev       Server with reload
+make desktop   Native desktop window
+make build-windows  Standalone .exe (dist\PDF Utils.exe)
+make installer Windows installer (installer_output\PDF-Utils-Setup.exe)
 make test      Pytest (+ coverage gate)
 make clean     Clear venv/cache/storage
 ```
+
+## Releasing
+
+Pushing a `v*.*.*` tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml) on `windows-latest`: it installs dependencies, runs the test suite, builds `dist\PDF Utils.exe` with PyInstaller, compiles `installer.iss` with the tag's version (`ISCC /DMyAppVersion=<version>`), and publishes a GitHub Release with `PDF-Utils-Setup.exe` attached plus auto-generated release notes.
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+The workflow can also be run manually from the **Actions** tab (`workflow_dispatch`, pass the version) for a release without moving the tag first — useful for testing the build.
+
+Bump `APP_VERSION` in [`app/config.py`](app/config.py) and `version` in `pyproject.toml` to match before tagging, so the in-app [update check](#update-checks) and the installer agree on "current version."
 
 ## Support
 

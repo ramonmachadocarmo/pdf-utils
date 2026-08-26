@@ -116,6 +116,29 @@ body {
   line-height: 1.55;
 }
 
+.update-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.update-banner[hidden] {
+  display: none;
+}
+
+.update-banner:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
 .workspace {
   display: flex;
   flex-direction: column;

@@ -65,5 +65,6 @@
   "thumb.alt": "Page {n}",
   "prompt.text": "Text:",
   "stamp.label.approved": "APPROVED",
-  "stamp.label.paid": "PAID"
+  "stamp.label.paid": "PAID",
+  "update.available": "Update available"
 }

@@ -1,7 +1,10 @@
-.PHONY: help setup install run dev test clean
+.PHONY: help setup install run dev desktop build-windows installer test clean
 
 PYTHON_VERSION := 3.13.11
 POETRY := pyenv exec poetry
+
+SHELL := cmd.exe
+.SHELLFLAGS := /c
 
 .DEFAULT_GOAL := help
 
@@ -26,9 +29,18 @@ run: ## Start server at http://127.0.0.1:8000
 dev: ## Start with hot reload
 	$(POETRY) run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
+desktop: ## Run as a native desktop window
+	$(POETRY) run python -m app.desktop
+
+build-windows: ## Build a standalone Windows .exe (dist/PDF Utils.exe)
+	$(POETRY) run pyinstaller --noconfirm pdf-utils.spec
+
+installer: build-windows ## Build a Windows installer (installer_output/PDF-Utils-Setup.exe). Needs Inno Setup.
+	powershell -NoProfile -Command "$$candidates = @((Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source, \"$$env:LOCALAPPDATA\Programs\InnoSetup6\ISCC.exe\", 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe', 'C:\Program Files\Inno Setup 6\ISCC.exe'); $$iscc = $$candidates | Where-Object { $$_ -and (Test-Path $$_) } | Select-Object -First 1; if (-not $$iscc) { Write-Error 'Inno Setup (ISCC.exe) not found. Install it from https://jrsoftware.org/isinfo.php'; exit 1 }; & $$iscc installer.iss"
+
 test: ## Run unit tests with coverage gate
 	$(POETRY) run pytest -q
 
 clean: ## Remove .venv, caches, and storage
 	-$(POETRY) env remove --all
-	-powershell -NoProfile -Command "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue .venv, .pytest_cache, dist; if (Test-Path storage) { Get-ChildItem storage -Exclude .gitkeep | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }; Get-ChildItem -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force"
+	-powershell -NoProfile -Command "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue .venv, .pytest_cache, build, dist; if (Test-Path storage) { Get-ChildItem storage -Exclude .gitkeep | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }; Get-ChildItem -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force"

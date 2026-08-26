@@ -488,9 +488,29 @@ document.addEventListener("i18n:changed", () => {
   }
 });
 
+async function checkForUpdate() {
+  const banner = document.getElementById("update-banner");
+  const versionEl = document.getElementById("update-version");
+  if (!banner || !versionEl) return;
+
+  try {
+    const res = await fetch("/api/update-check");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.update_available) return;
+
+    versionEl.textContent = `v${data.latest_version}`;
+    banner.href = data.download_url || data.release_url || "#";
+    banner.hidden = false;
+  } catch {
+    // offline, blocked, or rate-limited — skip silently
+  }
+}
+
 (async () => {
   await window.I18n.load(window.I18n.detect());
   syncFormatFields();
   syncToolUi();
   applyZoom();
+  checkForUpdate();
 })();
