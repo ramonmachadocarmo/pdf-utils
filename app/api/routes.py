@@ -1,3 +1,4 @@
+import logging
 import shutil
 import uuid
 from pathlib import Path
@@ -6,7 +7,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
 from app.api.schemas import AnnotateBody, RotateBody
-from app.config import OUTPUTS, UPLOADS
+from app.config import MAX_UPLOAD_SIZE, OUTPUTS, UPLOADS
 from app.domain.models import (
     ConversionRequest,
     HighlightBox,
@@ -21,6 +22,8 @@ from app.services.converter import ConversionService
 from app.services.pdf_editor import PdfEditor
 from app.services.pdf_reader import PdfReader
 from app.services.updater import check_for_update
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
@@ -67,8 +70,20 @@ async def upload(file: UploadFile = File(...)):
     pdf_path = upload_dir / "source.pdf"
     working_path = upload_dir / "working.pdf"
 
+    size = 0
+    exceeded = False
     with pdf_path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_UPLOAD_SIZE:
+                exceeded = True
+                break
+            f.write(chunk)
+
+    if exceeded:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        raise HTTPException(413, f"file exceeds {MAX_UPLOAD_SIZE // (1024 * 1024)}MB limit")
+
     shutil.copy2(pdf_path, working_path)
 
     meta = reader.read_meta(working_path)
@@ -168,8 +183,9 @@ async def annotate(job_id: str, body: AnnotateBody):
         _replace_working(job_id, tmp_path)
     except (IndexError, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(500, f"failed to annotate: {exc}") from exc
+    except Exception:
+        logger.exception("failed to annotate job %s", job_id)
+        raise HTTPException(500, "failed to annotate PDF") from None
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -188,8 +204,9 @@ async def rotate(job_id: str, body: RotateBody):
         _replace_working(job_id, tmp_path)
     except (IndexError, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(500, f"failed to rotate: {exc}") from exc
+    except Exception:
+        logger.exception("failed to rotate job %s", job_id)
+        raise HTTPException(500, "failed to rotate PDF") from None
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -233,8 +250,9 @@ async def convert(
     request = ConversionRequest(format=output_format, dpi=dpi, quality=quality)
     try:
         result = converter.convert(pdf_path, out_dir, request)
-    except Exception as exc:
-        raise HTTPException(500, f"conversion failed: {exc}") from exc
+    except Exception:
+        logger.exception("conversion failed for job %s", job_id)
+        raise HTTPException(500, "conversion failed") from None
 
     media = _MEDIA_TYPES.get(result.suffix.lower(), "application/octet-stream")
     return FileResponse(result, media_type=media, filename=result.name)

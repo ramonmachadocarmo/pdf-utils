@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 import pytest
 
+from app.api import routes
 from app.api.schemas import AnnotateBody, StrokeIn
 from app.main import app
 
@@ -122,6 +123,64 @@ def test_convert_png(sample_pdf: Path):
     )
     assert res.status_code == 200
     assert res.headers["content-type"].startswith("image/png")
+
+
+def test_upload_rejects_oversized_file(sample_pdf: Path, monkeypatch):
+    monkeypatch.setattr(routes, "MAX_UPLOAD_SIZE", 10)
+    with sample_pdf.open("rb") as f:
+        res = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    assert res.status_code == 413
+
+
+def test_annotate_internal_error_returns_generic_message(sample_pdf: Path, monkeypatch):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("internal detail: C:\\secret\\path")
+
+    monkeypatch.setattr(routes.editor, "apply_edits", boom)
+    res = client.post(
+        f"/api/annotate/{job_id}",
+        json={"pages": [{"page_index": 0, "stamps": [{"kind": "approved", "x": 0.5, "y": 0.5}]}]},
+    )
+    assert res.status_code == 500
+    assert res.json()["detail"] == "failed to annotate PDF"
+    assert "secret" not in res.text
+
+
+def test_rotate_internal_error_returns_generic_message(sample_pdf: Path, monkeypatch):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("internal detail: C:\\secret\\path")
+
+    monkeypatch.setattr(routes.editor, "rotate_page", boom)
+    res = client.post(f"/api/rotate/{job_id}", json={"page_index": 0, "degrees": 90})
+    assert res.status_code == 500
+    assert res.json()["detail"] == "failed to rotate PDF"
+    assert "secret" not in res.text
+
+
+def test_convert_internal_error_returns_generic_message(sample_pdf: Path, monkeypatch):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("internal detail: C:\\secret\\path")
+
+    monkeypatch.setattr(routes.converter, "convert", boom)
+    res = client.post(
+        f"/api/convert/{job_id}",
+        data={"format": "png", "dpi": "72", "quality": "90"},
+    )
+    assert res.status_code == 500
+    assert res.json()["detail"] == "conversion failed"
+    assert "secret" not in res.text
 
 
 def test_index_page():
