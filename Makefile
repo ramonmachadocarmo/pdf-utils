@@ -36,7 +36,7 @@ build-windows: ## Build a standalone Windows .exe (dist/PDF Utils.exe)
 	$(POETRY) run pyinstaller --noconfirm pdf-utils.spec
 
 installer: build-windows ## Build a Windows installer (installer_output/PDF-Utils-Setup.exe). Needs Inno Setup.
-	powershell -NoProfile -Command "$$candidates = @((Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source, \"$$env:LOCALAPPDATA\Programs\InnoSetup6\ISCC.exe\", 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe', 'C:\Program Files\Inno Setup 6\ISCC.exe'); $$iscc = $$candidates | Where-Object { $$_ -and (Test-Path $$_) } | Select-Object -First 1; if (-not $$iscc) { Write-Error 'Inno Setup (ISCC.exe) not found. Install it from https://jrsoftware.org/isinfo.php'; exit 1 }; & $$iscc installer.iss"
+	powershell -NoProfile -Command "$$version = ([regex]::Match((Get-Content app\config.py -Raw), 'APP_VERSION\s*=\s*\x22([^\x22]+)\x22')).Groups[1].Value; $$candidates = @((Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source, \"$$env:LOCALAPPDATA\Programs\InnoSetup6\ISCC.exe\", 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe', 'C:\Program Files\Inno Setup 6\ISCC.exe'); $$iscc = $$candidates | Where-Object { $$_ -and (Test-Path $$_) } | Select-Object -First 1; if (-not $$iscc) { Write-Error 'Inno Setup (ISCC.exe) not found. Install it from https://jrsoftware.org/isinfo.php'; exit 1 }; & $$iscc /DMyAppVersion=$$version installer.iss"
 
 test: ## Run unit tests with coverage gate
 	$(POETRY) run pytest -q
