@@ -20,6 +20,7 @@ from app.domain.models import (
 from app.services.converter import ConversionService
 from app.services.pdf_editor import PdfEditor
 from app.services.pdf_reader import PdfReader
+from app.services.updater import check_for_update
 
 router = APIRouter(prefix="/api")
 
@@ -237,3 +238,15 @@ async def convert(
 
     media = _MEDIA_TYPES.get(result.suffix.lower(), "application/octet-stream")
     return FileResponse(result, media_type=media, filename=result.name)
+
+
+@router.get("/update-check")
+def update_check():
+    info = check_for_update()
+    return {
+        "current_version": info.current_version,
+        "latest_version": info.latest_version,
+        "update_available": info.update_available,
+        "release_url": info.release_url,
+        "download_url": info.download_url,
+    }
