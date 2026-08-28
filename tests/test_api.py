@@ -132,6 +132,132 @@ def test_upload_rejects_oversized_file(sample_pdf: Path, monkeypatch):
     assert res.status_code == 413
 
 
+def test_open_local_loads_existing_file(sample_pdf: Path):
+    res = client.post("/api/open-local", params={"path": str(sample_pdf)})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["page_count"] == 1
+    assert data["filename"] == sample_pdf.name
+
+
+def test_open_local_rejects_missing_file(tmp_path: Path):
+    res = client.post("/api/open-local", params={"path": str(tmp_path / "missing.pdf")})
+    assert res.status_code == 400
+
+
+def test_open_local_rejects_non_pdf(tmp_path: Path):
+    path = tmp_path / "note.txt"
+    path.write_text("nope")
+    res = client.post("/api/open-local", params={"path": str(path)})
+    assert res.status_code == 400
+
+
+def test_open_local_rejects_oversized_file(sample_pdf: Path, monkeypatch):
+    monkeypatch.setattr(routes, "MAX_UPLOAD_SIZE", 10)
+    res = client.post("/api/open-local", params={"path": str(sample_pdf)})
+    assert res.status_code == 413
+
+
+def test_merge_inspect_rejects_single_file(sample_pdf: Path):
+    with sample_pdf.open("rb") as f:
+        res = client.post("/api/merge/inspect", files={"files": ("sample.pdf", f, "application/pdf")})
+    assert res.status_code == 400
+
+
+def test_merge_inspect_uniform_size(multipage_pdf: Path):
+    with multipage_pdf.open("rb") as a, multipage_pdf.open("rb") as b:
+        res = client.post(
+            "/api/merge/inspect",
+            files=[
+                ("files", ("a.pdf", a, "application/pdf")),
+                ("files", ("b.pdf", b, "application/pdf")),
+            ],
+        )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["uniform"] is True
+    assert len(data["sizes"]) == 1
+    assert data["sizes"][0]["page_count"] == 6
+
+
+def test_merge_inspect_detects_mixed_sizes(sample_pdf: Path, multipage_pdf: Path):
+    with sample_pdf.open("rb") as a, multipage_pdf.open("rb") as b:
+        res = client.post(
+            "/api/merge/inspect",
+            files=[
+                ("files", ("sample.pdf", a, "application/pdf")),
+                ("files", ("multi.pdf", b, "application/pdf")),
+            ],
+        )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["uniform"] is False
+    assert len(data["sizes"]) == 2
+
+
+def test_merge_execute_resizes_mismatched_pages(sample_pdf: Path, multipage_pdf: Path):
+    with sample_pdf.open("rb") as a, multipage_pdf.open("rb") as b:
+        inspect = client.post(
+            "/api/merge/inspect",
+            files=[
+                ("files", ("sample.pdf", a, "application/pdf")),
+                ("files", ("multi.pdf", b, "application/pdf")),
+            ],
+        )
+    merge_id = inspect.json()["merge_id"]
+
+    res = client.post(
+        "/api/merge/execute",
+        json={"merge_id": merge_id, "width": 300, "height": 400},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["page_count"] == 4
+    assert all(p["width"] == 300 and p["height"] == 400 for p in data["pages"])
+
+
+def test_merge_inspect_appends_to_current_document(sample_pdf: Path, multipage_pdf: Path):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    current_job_id = up.json()["job_id"]
+
+    with multipage_pdf.open("rb") as f:
+        res = client.post(
+            "/api/merge/inspect",
+            data={"current_job_id": current_job_id},
+            files=[("files", ("multi.pdf", f, "application/pdf"))],
+        )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["uniform"] is False
+    assert len(data["files"]) == 2
+
+    execute = client.post(
+        "/api/merge/execute",
+        json={"merge_id": data["merge_id"], "width": 300, "height": 400},
+    )
+    assert execute.status_code == 200
+    assert execute.json()["page_count"] == 4
+
+
+def test_merge_inspect_rejects_unknown_current_document(sample_pdf: Path):
+    with sample_pdf.open("rb") as f:
+        res = client.post(
+            "/api/merge/inspect",
+            data={"current_job_id": "does-not-exist"},
+            files=[("files", ("sample.pdf", f, "application/pdf"))],
+        )
+    assert res.status_code == 404
+
+
+def test_merge_execute_rejects_unknown_merge_id():
+    res = client.post(
+        "/api/merge/execute",
+        json={"merge_id": "does-not-exist", "width": 300, "height": 400},
+    )
+    assert res.status_code == 404
+
+
 def test_annotate_internal_error_returns_generic_message(sample_pdf: Path, monkeypatch):
     with sample_pdf.open("rb") as f:
         up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})

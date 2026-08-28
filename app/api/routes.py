@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 
-from app.api.schemas import AnnotateBody, RotateBody
+from app.api.schemas import AnnotateBody, MergeExecuteBody, RotateBody
 from app.config import MAX_UPLOAD_SIZE, OUTPUTS, UPLOADS
 from app.domain.models import (
     ConversionRequest,
@@ -60,6 +60,23 @@ def _replace_working(job_id: str, tmp_path: Path) -> None:
     tmp_path.replace(working)
 
 
+def _finish_ingest(upload_dir: Path, job_id: str, filename: str) -> dict:
+    pdf_path = upload_dir / "source.pdf"
+    working_path = upload_dir / "working.pdf"
+    shutil.copy2(pdf_path, working_path)
+
+    meta = reader.read_meta(working_path)
+    return {
+        "job_id": job_id,
+        "filename": filename,
+        "title": meta.title,
+        "page_count": meta.page_count,
+        "pages": [
+            {"index": p.index, "width": p.width, "height": p.height} for p in meta.pages
+        ],
+    }
+
+
 @router.post("/upload")
 async def upload(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -68,7 +85,6 @@ async def upload(file: UploadFile = File(...)):
     job_id = uuid.uuid4().hex
     upload_dir, _ = _job_dirs(job_id)
     pdf_path = upload_dir / "source.pdf"
-    working_path = upload_dir / "working.pdf"
 
     size = 0
     exceeded = False
@@ -84,18 +100,130 @@ async def upload(file: UploadFile = File(...)):
         shutil.rmtree(upload_dir, ignore_errors=True)
         raise HTTPException(413, f"file exceeds {MAX_UPLOAD_SIZE // (1024 * 1024)}MB limit")
 
-    shutil.copy2(pdf_path, working_path)
+    return _finish_ingest(upload_dir, job_id, file.filename)
 
-    meta = reader.read_meta(working_path)
+
+def _round_size(width: float, height: float) -> tuple[float, float]:
+    return (round(width, 1), round(height, 1))
+
+
+@router.post("/merge/inspect")
+async def merge_inspect(files: list[UploadFile] = File(...), current_job_id: str | None = Form(None)):
+    min_required = 1 if current_job_id else 2
+    if len(files) < min_required:
+        raise HTTPException(400, "select at least two PDF files")
+    for f in files:
+        if not f.filename or not f.filename.lower().endswith(".pdf"):
+            raise HTTPException(400, "all files must be PDFs")
+
+    merge_id = uuid.uuid4().hex
+    input_dir = UPLOADS / merge_id / "merge_inputs"
+    input_dir.mkdir(parents=True, exist_ok=True)
+
+    saved: list[Path] = []
+    names: list[str] = []
+    next_index = 0
+
+    if current_job_id:
+        current_pdf = _pdf_path(current_job_id)
+        if not current_pdf.exists():
+            shutil.rmtree(input_dir.parent, ignore_errors=True)
+            raise HTTPException(404, "current document not found")
+        dest = input_dir / f"{next_index:03d}.pdf"
+        shutil.copy2(current_pdf, dest)
+        saved.append(dest)
+        names.append("current document")
+        next_index += 1
+
+    for f in files:
+        dest = input_dir / f"{next_index:03d}.pdf"
+        size = 0
+        exceeded = False
+        with dest.open("wb") as out:
+            while chunk := await f.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_UPLOAD_SIZE:
+                    exceeded = True
+                    break
+                out.write(chunk)
+        if exceeded:
+            shutil.rmtree(input_dir.parent, ignore_errors=True)
+            raise HTTPException(413, f"each file must be under {MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+        saved.append(dest)
+        names.append(f.filename)
+        next_index += 1
+
+    size_counts: dict[tuple[float, float], int] = {}
+    file_infos = []
+    for path, name in zip(saved, names):
+        try:
+            meta = reader.read_meta(path)
+        except Exception:
+            shutil.rmtree(input_dir.parent, ignore_errors=True)
+            raise HTTPException(400, f"could not read {name}") from None
+        for p in meta.pages:
+            key = _round_size(p.width, p.height)
+            size_counts[key] = size_counts.get(key, 0) + 1
+        file_infos.append({"name": name, "page_count": meta.page_count})
+
+    sizes = [
+        {"width": w, "height": h, "page_count": count}
+        for (w, h), count in sorted(size_counts.items(), key=lambda kv: -kv[1])
+    ]
+
     return {
-        "job_id": job_id,
-        "filename": file.filename,
-        "title": meta.title,
-        "page_count": meta.page_count,
-        "pages": [
-            {"index": p.index, "width": p.width, "height": p.height} for p in meta.pages
-        ],
+        "merge_id": merge_id,
+        "files": file_infos,
+        "sizes": sizes,
+        "uniform": len(sizes) <= 1,
     }
+
+
+@router.post("/merge/execute")
+async def merge_execute(body: MergeExecuteBody):
+    input_dir = UPLOADS / body.merge_id / "merge_inputs"
+    if not input_dir.exists():
+        raise HTTPException(404, "merge session not found")
+
+    pdf_paths = sorted(input_dir.glob("*.pdf"))
+    if len(pdf_paths) < 2:
+        raise HTTPException(400, "merge session is missing files")
+
+    job_id = uuid.uuid4().hex
+    upload_dir, _ = _job_dirs(job_id)
+    pdf_path = upload_dir / "source.pdf"
+
+    try:
+        editor.merge_pdfs(pdf_paths, body.width, body.height, pdf_path)
+    except Exception:
+        logger.exception("failed to merge session %s", body.merge_id)
+        raise HTTPException(500, "failed to merge PDFs") from None
+    finally:
+        shutil.rmtree(input_dir.parent, ignore_errors=True)
+
+    return _finish_ingest(upload_dir, job_id, "merged.pdf")
+
+
+@router.post("/open-local")
+async def open_local(path: str):
+    """Load a PDF already on disk, used when the desktop app is launched via file association."""
+    source = Path(path)
+    if source.suffix.lower() != ".pdf" or not source.is_file():
+        raise HTTPException(400, "file not found")
+
+    if source.stat().st_size > MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"file exceeds {MAX_UPLOAD_SIZE // (1024 * 1024)}MB limit")
+
+    job_id = uuid.uuid4().hex
+    upload_dir, _ = _job_dirs(job_id)
+    pdf_path = upload_dir / "source.pdf"
+    try:
+        shutil.copy2(source, pdf_path)
+    except OSError as exc:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        raise HTTPException(400, "could not read file") from exc
+
+    return _finish_ingest(upload_dir, job_id, source.name)
 
 
 @router.get("/preview/{job_id}/{page_index}")

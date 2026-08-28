@@ -188,6 +188,25 @@ async function loadPreview() {
   loadPageEdits();
 }
 
+async function applyLoadedJob(data) {
+  state.jobId = data.job_id;
+  state.pageCount = data.page_count;
+  state.pageIndex = 0;
+  state.editsByPage = {};
+  state.dirtyPages = new Set();
+  state.searchHits = [];
+  state.searchCursor = -1;
+  searchCount.textContent = "0";
+
+  fileName.textContent = data.filename;
+  pageCountEl.textContent = String(data.page_count);
+  panel.hidden = false;
+  document.body.classList.add("editing");
+  renderThumbs();
+  setStatus(t("status.tools_ready"));
+  await loadPreview();
+}
+
 async function uploadFile(file) {
   if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
     setStatus(t("status.select_pdf"));
@@ -205,23 +224,115 @@ async function uploadFile(file) {
     return;
   }
 
-  const data = await res.json();
-  state.jobId = data.job_id;
-  state.pageCount = data.page_count;
-  state.pageIndex = 0;
-  state.editsByPage = {};
-  state.dirtyPages = new Set();
-  state.searchHits = [];
-  state.searchCursor = -1;
-  searchCount.textContent = "0";
+  await applyLoadedJob(await res.json());
+}
 
-  fileName.textContent = data.filename;
-  pageCountEl.textContent = String(data.page_count);
-  panel.hidden = false;
-  document.body.classList.add("editing");
-  renderThumbs();
-  setStatus(t("status.tools_ready"));
-  await loadPreview();
+async function openLocalFile(path) {
+  setStatus(t("status.uploading"));
+  const res = await fetch(`/api/open-local?path=${encodeURIComponent(path)}`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    setStatus(err.detail || t("status.upload_failed"));
+    return;
+  }
+
+  await applyLoadedJob(await res.json());
+}
+
+const mergeBtn = document.getElementById("merge-btn");
+const mergeInput = document.getElementById("merge-input");
+const mergeModal = document.getElementById("merge-modal");
+const mergeSizeList = document.getElementById("merge-size-list");
+const mergeCancelBtn = document.getElementById("merge-cancel");
+const mergeConfirmBtn = document.getElementById("merge-confirm");
+
+let pendingMergeId = null;
+
+mergeBtn.addEventListener("click", () => mergeInput.click());
+
+mergeInput.addEventListener("change", async () => {
+  const files = Array.from(mergeInput.files || []);
+  mergeInput.value = "";
+  const minRequired = state.jobId ? 1 : 2;
+  if (files.length < minRequired) {
+    setStatus(t(state.jobId ? "status.merge_select_one" : "status.merge_select_two"));
+    return;
+  }
+  await inspectMerge(files);
+});
+
+async function inspectMerge(files) {
+  setStatus(t("status.merge_uploading"));
+  const body = new FormData();
+  for (const file of files) body.append("files", file);
+  if (state.jobId) body.append("current_job_id", state.jobId);
+
+  const res = await fetch("/api/merge/inspect", { method: "POST", body });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    setStatus(err.detail || t("status.merge_failed"));
+    return;
+  }
+
+  const data = await res.json();
+  pendingMergeId = data.merge_id;
+
+  if (data.uniform) {
+    const [size] = data.sizes;
+    await executeMerge(size.width, size.height);
+    return;
+  }
+
+  showMergeSizePicker(data.sizes);
+}
+
+function showMergeSizePicker(sizes) {
+  mergeSizeList.innerHTML = "";
+  sizes.forEach((size, i) => {
+    const label = document.createElement("label");
+    label.className = "merge-size-option";
+    label.dataset.width = String(size.width);
+    label.dataset.height = String(size.height);
+    label.innerHTML = `
+      <input type="radio" name="merge-size" value="${i}" ${i === 0 ? "checked" : ""} />
+      <span>${Math.round(size.width)} × ${Math.round(size.height)} pt · ${size.page_count} ${t("merge.pages")}</span>
+    `;
+    mergeSizeList.appendChild(label);
+  });
+  mergeModal.hidden = false;
+}
+
+mergeCancelBtn.addEventListener("click", () => {
+  mergeModal.hidden = true;
+  pendingMergeId = null;
+});
+
+mergeConfirmBtn.addEventListener("click", async () => {
+  const selected = mergeSizeList.querySelector("input[name='merge-size']:checked");
+  if (!selected || !pendingMergeId) return;
+  const option = selected.closest(".merge-size-option");
+  mergeModal.hidden = true;
+  await executeMerge(Number(option.dataset.width), Number(option.dataset.height));
+});
+
+async function executeMerge(width, height) {
+  if (!pendingMergeId) return;
+  const mergeId = pendingMergeId;
+  pendingMergeId = null;
+
+  setStatus(t("status.merge_uploading"));
+  const res = await fetch("/api/merge/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ merge_id: mergeId, width, height }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    setStatus(err.detail || t("status.merge_failed"));
+    return;
+  }
+
+  await applyLoadedJob(await res.json());
 }
 
 async function changePage(nextIndex) {
@@ -513,4 +624,7 @@ async function checkForUpdate() {
   syncToolUi();
   applyZoom();
   checkForUpdate();
+
+  const openPath = new URLSearchParams(window.location.search).get("open");
+  if (openPath) await openLocalFile(openPath);
 })();

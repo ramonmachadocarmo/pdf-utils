@@ -57,3 +57,9 @@ class AnnotateBody(BaseModel):
 class RotateBody(BaseModel):
     page_index: int = Field(ge=0)
     degrees: int = Field(default=90)
+
+
+class MergeExecuteBody(BaseModel):
+    merge_id: str = Field(min_length=1)
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
