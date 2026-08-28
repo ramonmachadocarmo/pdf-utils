@@ -33,11 +33,15 @@
     </header>
 
     <section class="workspace" data-i18n-aria="a11y.editor" aria-label="Editor">
-      <label class="drop chrome" id="dropzone" for="file-input">
-        <input id="file-input" type="file" accept="application/pdf,.pdf" hidden />
-        <span class="drop-title" data-i18n="drop.title">Drop your PDF here</span>
-        <span class="drop-sub" data-i18n="drop.sub">or click to choose a file</span>
-      </label>
+      <div class="drop-row" id="drop-row">
+        <label class="drop chrome" id="dropzone" for="file-input">
+          <input id="file-input" type="file" accept="application/pdf,.pdf" hidden />
+          <span class="drop-title" data-i18n="drop.title">Drop your PDF here</span>
+          <span class="drop-sub" data-i18n="drop.sub">or click to choose a file</span>
+        </label>
+        <button type="button" class="ghost merge-btn chrome" id="merge-btn" data-i18n="merge.btn">Concatenate PDFs</button>
+        <input id="merge-input" type="file" accept="application/pdf,.pdf" multiple hidden />
+      </div>
 
       <div class="panel" id="panel" hidden>
         <div class="top-chrome chrome">
@@ -150,6 +154,19 @@
       </div>
     </section>
   </main>
+
+  <div class="modal-backdrop" id="merge-modal" hidden>
+    <div class="modal chrome">
+      <h2 data-i18n="merge.pick_title">Choose a page size</h2>
+      <p class="lede" data-i18n="merge.pick_sub">Your files have different page sizes. Pick one — the rest will be resized to fit.</p>
+      <div class="merge-size-list" id="merge-size-list"></div>
+      <div class="modal-actions">
+        <button type="button" class="ghost" id="merge-cancel" data-i18n="merge.cancel">Cancel</button>
+        <button type="button" class="cta" id="merge-confirm" data-i18n="merge.confirm">Merge</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/i18n.js"></script>
   <script src="/static/editor.js"></script>
   <script src="/static/app.js"></script>

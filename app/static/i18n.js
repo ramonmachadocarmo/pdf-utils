@@ -15,7 +15,9 @@ const I18n = {
 
   async load(lang) {
     const next = SUPPORTED.includes(lang) ? lang : "en";
-    const res = await fetch(`/static/i18n/${next}.json`);
+    const version = document.querySelector('meta[name="asset-version"]')?.content;
+    const url = version ? `/static/i18n/${next}.json?v=${version}` : `/static/i18n/${next}.json`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`locale ${next} missing`);
     this.dict = await res.json();
     this.lang = next;

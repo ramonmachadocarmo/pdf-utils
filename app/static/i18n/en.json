@@ -66,5 +66,15 @@
   "prompt.text": "Text:",
   "stamp.label.approved": "APPROVED",
   "stamp.label.paid": "PAID",
-  "update.available": "Update available"
+  "update.available": "Update available",
+  "merge.btn": "Concatenate PDFs",
+  "merge.pick_title": "Choose a page size",
+  "merge.pick_sub": "Your files have different page sizes. Pick one — the rest will be resized to fit.",
+  "merge.cancel": "Cancel",
+  "merge.confirm": "Merge",
+  "merge.pages": "pages",
+  "status.merge_select_two": "Select at least two PDF files.",
+  "status.merge_select_one": "Select at least one more PDF to add.",
+  "status.merge_uploading": "Uploading files…",
+  "status.merge_failed": "Merge failed."
 }

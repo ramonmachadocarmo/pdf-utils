@@ -45,6 +45,29 @@ class PdfEditor:
             doc.save(out_path, garbage=4, deflate=True)
         return out_path
 
+    def merge_pdfs(
+        self, pdf_paths: list[Path], target_width: float, target_height: float, out_path: Path
+    ) -> Path:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        tolerance = 1.0
+        target_rect = pymupdf.Rect(0, 0, target_width, target_height)
+        with pymupdf.open() as out_doc:
+            for pdf_path in pdf_paths:
+                with pymupdf.open(pdf_path) as src:
+                    for page_index in range(len(src)):
+                        page = src[page_index]
+                        same_size = (
+                            abs(page.rect.width - target_width) <= tolerance
+                            and abs(page.rect.height - target_height) <= tolerance
+                        )
+                        if same_size:
+                            out_doc.insert_pdf(src, from_page=page_index, to_page=page_index)
+                        else:
+                            new_page = out_doc.new_page(width=target_width, height=target_height)
+                            new_page.show_pdf_page(target_rect, src, page_index, keep_proportion=True)
+            out_doc.save(out_path, garbage=4, deflate=True)
+        return out_path
+
     def rotate_page(self, pdf_path: Path, page_index: int, degrees: int, out_path: Path) -> Path:
         if degrees not in (90, 180, 270, -90):
             raise ValueError("degrees must be 90, 180, 270, or -90")

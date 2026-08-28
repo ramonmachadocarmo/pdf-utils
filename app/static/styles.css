@@ -145,15 +145,22 @@ body {
   gap: 0.75rem;
 }
 
+.drop-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+
 .drop {
   display: grid;
   place-items: center;
   gap: 0.35rem;
+  flex: 1;
   min-height: 108px;
   border: 1.5px dashed var(--line);
   background: color-mix(in srgb, var(--stage) 35%, transparent);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, min-height 0.2s ease, padding 0.2s ease;
 }
 
 .drop:hover, .drop.dragover {
@@ -169,6 +176,10 @@ body {
 
 .drop-sub { color: var(--muted); font-size: 0.95rem; }
 
+.merge-btn { flex-shrink: 0; align-self: center; white-space: nowrap; display: none; }
+
+body.editing .merge-btn { display: inline-flex; align-items: center; }
+
 .panel {
   display: flex;
   flex-direction: column;
@@ -179,8 +190,71 @@ body {
   display: none !important;
 }
 
-body.editing .brand,
-body.editing .drop { display: none; }
+body.editing .brand { display: none; }
+
+body.editing .drop-row { margin-bottom: 0.5rem; }
+
+body.editing .drop {
+  flex-direction: row;
+  min-height: unset;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+}
+
+body.editing .drop-title { font-size: 0.88rem; }
+body.editing .drop-sub { display: none; }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, black 45%, transparent);
+}
+
+.modal-backdrop[hidden] { display: none; }
+
+.modal {
+  width: min(28rem, 100%);
+  padding: 1.4rem;
+  border-radius: 1rem;
+  background: var(--stage);
+  box-shadow: 0 24px 60px var(--shadow);
+}
+
+.modal h2 {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+}
+
+.merge-size-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.merge-size-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--wash) 60%, transparent);
+  cursor: pointer;
+}
+
+.merge-size-option input { accent-color: var(--accent); }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
 
 .top-chrome {
   display: grid;
