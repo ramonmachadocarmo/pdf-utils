@@ -23,7 +23,7 @@ def _free_port() -> int:
 def _startup_file() -> str | None:
     """Path passed by Windows when this exe is launched via file association / "Open with"."""
     for arg in sys.argv[1:]:
-        if arg.lower().endswith(".pdf"):
+        if arg.lower().endswith((".pdf", ".xml")):
             return arg
     return None
 

@@ -16,6 +16,7 @@ pdf2docx = ">=0.5.8"
 pillow = ">=10.4.0"
 pywebview = ">=6.2.1"
 pythonnet = { version = ">=3.1.0", markers = "sys_platform == 'win32'" }
+defusedxml = "^0.7.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0.0"

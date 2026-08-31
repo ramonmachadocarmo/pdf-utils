@@ -158,6 +158,50 @@ def test_open_local_rejects_oversized_file(sample_pdf: Path, monkeypatch):
     assert res.status_code == 413
 
 
+_SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+  <infNFe Id="NFe12345" versao="4.00">
+    <ide><nNF>1234</nNF></ide>
+    <emit><xNome>ACME LTDA</xNome></emit>
+  </infNFe>
+</NFe>
+"""
+
+
+def test_upload_xml_renders_pdf():
+    res = client.post(
+        "/api/upload",
+        files={"file": ("nfe.xml", _SAMPLE_XML.encode("utf-8"), "application/xml")},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["page_count"] >= 1
+    assert data["filename"] == "nfe.xml"
+
+    dl = client.get(f"/api/download/{data['job_id']}")
+    assert dl.status_code == 200
+    assert dl.headers["content-type"] == "application/pdf"
+
+
+def test_upload_rejects_malformed_xml():
+    res = client.post(
+        "/api/upload",
+        files={"file": ("bad.xml", b"<not><closed>", "application/xml")},
+    )
+    assert res.status_code == 400
+
+
+def test_open_local_loads_xml(tmp_path: Path):
+    path = tmp_path / "nfe.xml"
+    path.write_text(_SAMPLE_XML, encoding="utf-8")
+
+    res = client.post("/api/open-local", params={"path": str(path)})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["page_count"] >= 1
+    assert data["filename"] == "nfe.xml"
+
+
 def test_merge_inspect_rejects_single_file(sample_pdf: Path):
     with sample_pdf.open("rb") as f:
         res = client.post("/api/merge/inspect", files={"files": ("sample.pdf", f, "application/pdf")})

@@ -22,6 +22,7 @@ from app.services.converter import ConversionService
 from app.services.pdf_editor import PdfEditor
 from app.services.pdf_reader import PdfReader
 from app.services.updater import check_for_update
+from app.services.xml_converter import InvalidXmlError, XmlConverter
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/api")
 reader = PdfReader()
 converter = ConversionService()
 editor = PdfEditor()
+xml_converter = XmlConverter()
 
 _MEDIA_TYPES = {
     ".png": "image/png",
@@ -60,6 +62,24 @@ def _replace_working(job_id: str, tmp_path: Path) -> None:
     tmp_path.replace(working)
 
 
+_ALLOWED_UPLOAD_SUFFIXES = (".pdf", ".xml")
+
+
+def _convert_xml_source(xml_path: Path, upload_dir: Path, job_id: str, source_name: str) -> None:
+    pdf_path = upload_dir / "source.pdf"
+    try:
+        xml_converter.convert(xml_path, pdf_path, source_name=source_name)
+    except InvalidXmlError as exc:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        raise HTTPException(400, str(exc)) from exc
+    except Exception:
+        logger.exception("failed to convert XML for job %s", job_id)
+        shutil.rmtree(upload_dir, ignore_errors=True)
+        raise HTTPException(500, "failed to convert XML") from None
+    finally:
+        xml_path.unlink(missing_ok=True)
+
+
 def _finish_ingest(upload_dir: Path, job_id: str, filename: str) -> dict:
     pdf_path = upload_dir / "source.pdf"
     working_path = upload_dir / "working.pdf"
@@ -79,16 +99,17 @@ def _finish_ingest(upload_dir: Path, job_id: str, filename: str) -> dict:
 
 @router.post("/upload")
 async def upload(file: UploadFile = File(...)):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "send a PDF file")
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in _ALLOWED_UPLOAD_SUFFIXES:
+        raise HTTPException(400, "send a PDF or XML file")
 
     job_id = uuid.uuid4().hex
     upload_dir, _ = _job_dirs(job_id)
-    pdf_path = upload_dir / "source.pdf"
+    raw_path = upload_dir / f"source{suffix}"
 
     size = 0
     exceeded = False
-    with pdf_path.open("wb") as f:
+    with raw_path.open("wb") as f:
         while chunk := await file.read(1024 * 1024):
             size += len(chunk)
             if size > MAX_UPLOAD_SIZE:
@@ -99,6 +120,9 @@ async def upload(file: UploadFile = File(...)):
     if exceeded:
         shutil.rmtree(upload_dir, ignore_errors=True)
         raise HTTPException(413, f"file exceeds {MAX_UPLOAD_SIZE // (1024 * 1024)}MB limit")
+
+    if suffix == ".xml":
+        _convert_xml_source(raw_path, upload_dir, job_id, file.filename)
 
     return _finish_ingest(upload_dir, job_id, file.filename)
 
@@ -206,9 +230,10 @@ async def merge_execute(body: MergeExecuteBody):
 
 @router.post("/open-local")
 async def open_local(path: str):
-    """Load a PDF already on disk, used when the desktop app is launched via file association."""
+    """Load a PDF or XML already on disk, used when the desktop app is launched via file association."""
     source = Path(path)
-    if source.suffix.lower() != ".pdf" or not source.is_file():
+    suffix = source.suffix.lower()
+    if suffix not in _ALLOWED_UPLOAD_SUFFIXES or not source.is_file():
         raise HTTPException(400, "file not found")
 
     if source.stat().st_size > MAX_UPLOAD_SIZE:
@@ -216,12 +241,15 @@ async def open_local(path: str):
 
     job_id = uuid.uuid4().hex
     upload_dir, _ = _job_dirs(job_id)
-    pdf_path = upload_dir / "source.pdf"
+    raw_path = upload_dir / f"source{suffix}"
     try:
-        shutil.copy2(source, pdf_path)
+        shutil.copy2(source, raw_path)
     except OSError as exc:
         shutil.rmtree(upload_dir, ignore_errors=True)
         raise HTTPException(400, "could not read file") from exc
+
+    if suffix == ".xml":
+        _convert_xml_source(raw_path, upload_dir, job_id, source.name)
 
     return _finish_ingest(upload_dir, job_id, source.name)
 

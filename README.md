@@ -31,6 +31,7 @@ The app is unsigned, so Windows SmartScreen will show an "unrecognized publisher
 ## Features
 
 ### Reading
+- Open XML files (NFS-e, invoices, and other documents) as a readable PDF — validated on load, rendered as an indented field tree
 - Page-by-page preview with thumbnails
 - Zoom in/out and pan with the **Hand** tool
 - Text search with hit navigation
@@ -92,7 +93,8 @@ make install  # create .venv and install dependencies
 ### Main dependencies
 
 - **FastAPI** + **Uvicorn** — API and static UI
-- **PyMuPDF** — read, preview, search, annotate, rotate
+- **PyMuPDF** — read, preview, search, annotate, rotate, render XML to PDF
+- **defusedxml** — safe XML parsing (upload validation)
 - **pdf2docx** — DOCX export
 - **Pillow** — image formats
 - **pywebview** — native desktop window (Windows)
@@ -170,7 +172,7 @@ Base path: `/api`
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| `POST` | `/api/upload` | Upload PDF (`multipart`, field `file`) → `{ job_id, filename, page_count, ... }` |
+| `POST` | `/api/upload` | Upload PDF or XML (`multipart`, field `file`) → `{ job_id, filename, page_count, ... }`. XML is validated and rendered to PDF. |
 | `GET` | `/api/preview/{job_id}/{page}` | Page preview PNG (`?dpi=160`) |
 | `GET` | `/api/search/{job_id}?q=` | Text search → normalized hits |
 | `POST` | `/api/annotate/{job_id}` | Persist edits (strokes, texts, highlights, stamps) |
