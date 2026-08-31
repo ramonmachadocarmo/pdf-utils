@@ -6,7 +6,7 @@ UPLOADS = STORAGE / "uploads"
 OUTPUTS = STORAGE / "outputs"
 STATIC = Path(__file__).resolve().parent / "static"
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 GITHUB_REPO = "ramonmachadocarmo/pdf-utils"
 
 MAX_UPLOAD_SIZE = 200 * 1024 * 1024  # 200 MB

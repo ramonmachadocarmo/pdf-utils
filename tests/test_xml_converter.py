@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import pymupdf
@@ -39,6 +40,21 @@ def test_convert_paginates_large_documents(tmp_path: Path):
 
     with pymupdf.open(out) as doc:
         assert len(doc) > 1
+
+
+def test_convert_truncates_huge_text_node(tmp_path: Path):
+    blob = "\n".join("A" * 76 for _ in range(20_000))  # ~1.5 MB, like an embedded CRL
+    xml_path = tmp_path / "signed.xml"
+    xml_path.write_text(f"<root><EncapsulatedCRLValue>{blob}</EncapsulatedCRLValue></root>", encoding="utf-8")
+
+    start = time.monotonic()
+    out = XmlConverter().convert(xml_path, tmp_path / "out.pdf")
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 10, "conversion should not stall laying out oversized text blobs"
+    with pymupdf.open(out) as doc:
+        assert len(doc) >= 1
+        assert "truncated" in doc[0].get_text()
 
 
 def test_convert_rejects_malformed_xml(tmp_path: Path):

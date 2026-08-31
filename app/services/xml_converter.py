@@ -7,6 +7,7 @@ from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import parse as parse_xml
 
 _MAX_DEPTH = 200
+_MAX_TEXT_CHARS = 2000
 
 _CSS = """
 body { font-family: sans-serif; font-size: 10pt; color: #1c2420; }
@@ -28,6 +29,12 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
 
 
+def _truncate(text: str) -> str:
+    if len(text) <= _MAX_TEXT_CHARS:
+        return text
+    return f"{text[:_MAX_TEXT_CHARS]}… ({len(text):,} chars total, truncated)"
+
+
 def _render_element(el: Element, depth: int) -> str:
     if depth > _MAX_DEPTH:
         return "<li>&hellip;</li>"
@@ -40,11 +47,11 @@ def _render_element(el: Element, depth: int) -> str:
     text = (el.text or "").strip()
 
     if not children:
-        text_html = f": <span class=\"text\">{escape(text)}</span>" if text else ""
+        text_html = f": <span class=\"text\">{escape(_truncate(text))}</span>" if text else ""
         return f'<li class="node"><span class="tag">{tag}</span>{attrs_html}{text_html}</li>'
 
     inner = "".join(_render_element(child, depth + 1) for child in children)
-    text_html = f'<div class="text">{escape(text)}</div>' if text else ""
+    text_html = f'<div class="text">{escape(_truncate(text))}</div>' if text else ""
     return (
         f'<li class="node"><span class="tag">{tag}</span>{attrs_html}{text_html}'
         f"<ul>{inner}</ul></li>"
