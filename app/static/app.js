@@ -208,7 +208,8 @@ async function applyLoadedJob(data) {
 }
 
 async function uploadFile(file) {
-  if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
+  const name = file ? file.name.toLowerCase() : "";
+  if (!file || !(name.endsWith(".pdf") || name.endsWith(".xml"))) {
     setStatus(t("status.select_pdf"));
     return;
   }
