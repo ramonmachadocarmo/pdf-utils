@@ -84,6 +84,25 @@ def test_apply_edits_skips_noop_shapes(sample_pdf: Path, tmp_path: Path):
     PdfEditor().apply_edits(sample_pdf, [edits], out)
     assert out.exists()
 
+def test_extract_pages_writes_subset(multipage_pdf: Path, tmp_path: Path):
+    out = tmp_path / "subset.pdf"
+    PdfEditor().extract_pages(multipage_pdf, 1, 2, out)
+    with pymupdf.open(out) as doc:
+        assert len(doc) == 2
+        assert "page 2" in doc[0].get_text()
+        assert "page 3" in doc[1].get_text()
+
+
+def test_extract_pages_invalid_range(multipage_pdf: Path, tmp_path: Path):
+    with pytest.raises(IndexError):
+        PdfEditor().extract_pages(multipage_pdf, 2, 1, tmp_path / "bad.pdf")
+
+
+def test_extract_pages_out_of_range(multipage_pdf: Path, tmp_path: Path):
+    with pytest.raises(IndexError):
+        PdfEditor().extract_pages(multipage_pdf, 0, 10, tmp_path / "bad.pdf")
+
+
 def test_apply_edits_page_out_of_range(sample_pdf: Path, tmp_path: Path):
     out = tmp_path / "bad.pdf"
     strokes = PageEdits(

@@ -78,25 +78,6 @@
         </div>
         <p class="status chrome" id="status" role="status"></p>
 
-        <div class="reader-bar chrome">
-          <label class="tool-field grow">
-            <span data-i18n="search.label">Search</span>
-            <input type="search" id="search-input" data-i18n-placeholder="search.placeholder" placeholder="text in PDF" />
-          </label>
-          <button type="button" class="ghost" id="search-btn" data-i18n="search.btn">Search</button>
-          <button type="button" class="ghost" id="search-prev" data-i18n="search.prev">Previous</button>
-          <button type="button" class="ghost" id="search-next" data-i18n="search.next">Next</button>
-          <span class="search-count" id="search-count">0</span>
-          <div class="zoom-cluster">
-            <button type="button" class="ghost icon-btn" id="zoom-out" data-i18n-aria="zoom.out" aria-label="Zoom out">−</button>
-            <span class="zoom-label" id="zoom-label">100%</span>
-            <button type="button" class="ghost icon-btn" id="zoom-in" data-i18n-aria="zoom.in" aria-label="Zoom in">+</button>
-          </div>
-          <button type="button" class="ghost" id="rotate-btn" data-i18n="reader.rotate">Rotate 90°</button>
-          <button type="button" class="ghost" id="night-btn" data-i18n="reader.night">Night</button>
-          <button type="button" class="ghost" id="focus-btn" data-i18n="reader.focus">Focus view</button>
-        </div>
-
         <div class="toolbar chrome" id="toolbar">
           <div class="tool-group" role="toolbar" data-i18n-aria="a11y.tools" aria-label="Tools">
             <button type="button" class="tool active" data-tool="pen" data-i18n="tool.pen">Pen</button>
@@ -141,15 +122,43 @@
           <aside class="thumbs" id="thumbs" data-i18n-aria="a11y.thumbs" aria-label="Thumbnails"></aside>
           <div class="preview-wrap">
             <div class="viewport" id="viewport">
-              <div class="stage" id="stage">
-                <img id="preview" alt="" draggable="false" />
-                <canvas id="draw-layer" data-i18n-aria="a11y.draw_layer" aria-label="Edit layer"></canvas>
-              </div>
+              <div class="pages" id="pages"></div>
+              <button type="button" class="nav nav-prev" id="prev-page" data-i18n-aria="a11y.page_prev" aria-label="Previous page">‹</button>
+              <button type="button" class="nav nav-next" id="next-page" data-i18n-aria="a11y.page_next" aria-label="Next page">›</button>
+              <p class="page-chip overlay chrome"><span id="page-current">1</span> / <span id="page-total">1</span></p>
             </div>
-            <button type="button" class="nav nav-prev" id="prev-page" data-i18n-aria="a11y.page_prev" aria-label="Previous page">‹</button>
-            <button type="button" class="nav nav-next" id="next-page" data-i18n-aria="a11y.page_next" aria-label="Next page">›</button>
-            <p class="page-chip overlay chrome"><span id="page-current">1</span> / <span id="page-total">1</span></p>
           </div>
+        </div>
+
+        <div class="reader-bar chrome" id="reader-bar">
+          <label class="tool-field grow">
+            <span data-i18n="search.label">Search</span>
+            <input type="search" id="search-input" data-i18n-placeholder="search.placeholder" placeholder="text in PDF" />
+          </label>
+          <button type="button" class="ghost" id="search-btn" data-i18n="search.btn">Search</button>
+          <button type="button" class="ghost" id="search-prev" data-i18n="search.prev">Previous</button>
+          <button type="button" class="ghost" id="search-next" data-i18n="search.next">Next</button>
+          <span class="search-count" id="search-count">0</span>
+          <div class="zoom-cluster">
+            <button type="button" class="ghost icon-btn" id="zoom-out" data-i18n-aria="zoom.out" aria-label="Zoom out">−</button>
+            <span class="zoom-label" id="zoom-label">100%</span>
+            <button type="button" class="ghost icon-btn" id="zoom-in" data-i18n-aria="zoom.in" aria-label="Zoom in">+</button>
+          </div>
+          <button type="button" class="ghost" id="rotate-btn" data-i18n="reader.rotate">Rotate 90°</button>
+          <button type="button" class="ghost" id="copy-text-btn" data-i18n="reader.copy_text">Copy text</button>
+          <div class="print-cluster">
+            <label class="tool-field" data-i18n-aria="print.from" aria-label="From page">
+              <span data-i18n="print.from">From</span>
+              <input type="number" id="print-from" min="1" value="1" />
+            </label>
+            <label class="tool-field" data-i18n-aria="print.to" aria-label="To page">
+              <span data-i18n="print.to">To</span>
+              <input type="number" id="print-to" min="1" value="1" />
+            </label>
+            <button type="button" class="ghost" id="print-btn" data-i18n="reader.print">Print</button>
+          </div>
+          <button type="button" class="ghost" id="night-btn" data-i18n="reader.night">Night</button>
+          <button type="button" class="ghost" id="focus-btn" data-i18n="reader.focus">Focus view</button>
         </div>
       </div>
     </section>

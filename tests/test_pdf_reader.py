@@ -62,3 +62,20 @@ def test_search_returns_matched_text_not_query(tmp_path: Path):
 
 def test_search_empty_query(sample_pdf: Path):
     assert PdfReader().search(sample_pdf, "   ") == []
+
+
+def test_extract_text_single_page(sample_pdf: Path):
+    text = PdfReader().extract_text(sample_pdf, 0)
+    assert "hello pdf-utils" in text
+
+
+def test_extract_text_out_of_range(sample_pdf: Path):
+    with pytest.raises(IndexError):
+        PdfReader().extract_text(sample_pdf, 99)
+
+
+def test_extract_text_whole_document(multipage_pdf: Path):
+    text = PdfReader().extract_text(multipage_pdf)
+    assert "page 1" in text
+    assert "page 2" in text
+    assert "page 3" in text

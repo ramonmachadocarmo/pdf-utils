@@ -17,8 +17,12 @@
   "zoom.out": "Zoom out",
   "zoom.in": "Zoom in",
   "reader.rotate": "Rotate 90°",
+  "reader.copy_text": "Copy text",
+  "reader.print": "Print",
   "reader.night": "Night",
   "reader.focus": "Focus view",
+  "print.from": "From",
+  "print.to": "To",
   "a11y.tools": "Tools",
   "tool.pen": "Pen",
   "tool.highlight": "Highlight",
@@ -76,5 +80,10 @@
   "status.merge_select_two": "Select at least two PDF files.",
   "status.merge_select_one": "Select at least one more PDF to add.",
   "status.merge_uploading": "Uploading files…",
-  "status.merge_failed": "Merge failed."
+  "status.merge_failed": "Merge failed.",
+  "status.copied": "Page text copied to clipboard.",
+  "status.copy_failed": "Failed to copy text.",
+  "status.printing": "Preparing pages to print…",
+  "status.print_failed": "Failed to prepare pages for printing.",
+  "status.print_network": "Network error while printing."
 }

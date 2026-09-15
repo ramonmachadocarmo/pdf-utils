@@ -24,6 +24,14 @@ class PdfReader:
             pix = page.get_pixmap(matrix=matrix, alpha=False)
             return pix.tobytes("png")
 
+    def extract_text(self, path: Path, page_index: int | None = None) -> str:
+        with pymupdf.open(path) as doc:
+            if page_index is not None:
+                if page_index < 0 or page_index >= len(doc):
+                    raise IndexError(f"page {page_index} out of range")
+                return doc[page_index].get_text().strip()
+            return "\n\n".join(page.get_text().strip() for page in doc)
+
     def search(self, path: Path, query: str) -> list[SearchHit]:
         query = query.strip()
         if not query:

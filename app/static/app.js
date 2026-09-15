@@ -2,7 +2,6 @@ const state = {
   jobId: null,
   pageCount: 0,
   pageIndex: 0,
-  editsByPage: {},
   dirtyPages: new Set(),
   tool: "pen",
   zoom: 1,
@@ -10,14 +9,17 @@ const state = {
   searchCursor: -1,
 };
 
+let pageEls = [];
+let pageControllers = [];
+let loadObserver = null;
+let currentObserver = null;
+
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
 const panel = document.getElementById("panel");
 const fileName = document.getElementById("file-name");
 const pageCountEl = document.getElementById("page-count");
-const preview = document.getElementById("preview");
-const canvas = document.getElementById("draw-layer");
-const stage = document.getElementById("stage");
+const pagesEl = document.getElementById("pages");
 const viewport = document.getElementById("viewport");
 const thumbs = document.getElementById("thumbs");
 const pageCurrent = document.getElementById("page-current");
@@ -58,19 +60,10 @@ const zoomOutBtn = document.getElementById("zoom-out");
 const zoomLabel = document.getElementById("zoom-label");
 const rotateBtn = document.getElementById("rotate-btn");
 const nightBtn = document.getElementById("night-btn");
-
-const editor = window.PdfEditorUI.createEditorController({
-  canvas,
-  getTool: () => state.tool,
-  getColor: () => penColor.value,
-  getWidthPx: () => Number(penWidth.value),
-  getStampKind: () => stampKind.value,
-  onChange: (edits) => {
-    state.editsByPage[state.pageIndex] = edits;
-    if (editor.hasEdits(edits)) state.dirtyPages.add(state.pageIndex);
-    else state.dirtyPages.delete(state.pageIndex);
-  },
-});
+const copyTextBtn = document.getElementById("copy-text-btn");
+const printFrom = document.getElementById("print-from");
+const printTo = document.getElementById("print-to");
+const printBtn = document.getElementById("print-btn");
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -107,49 +100,168 @@ function syncToolUi() {
     btn.classList.toggle("active", btn.dataset.tool === state.tool);
   });
   stampCluster.classList.toggle("is-active", state.tool === "stamp");
-  canvas.style.cursor = state.tool === "pan" ? "grab" : state.tool === "text" ? "text" : "crosshair";
+  const cursor = state.tool === "pan" ? "grab" : state.tool === "text" ? "text" : "crosshair";
+  pageEls.forEach((p) => {
+    p.canvas.style.cursor = cursor;
+  });
 }
 
 function applyZoom() {
-  stage.style.transform = `scale(${state.zoom})`;
-  stage.style.transformOrigin = "top left";
-  const baseH = preview.offsetHeight || 0;
-  stage.style.height = `${Math.max(baseH * state.zoom, baseH)}px`;
+  pagesEl.style.setProperty("--zoom", String(state.zoom));
   const label = `${Math.round(state.zoom * 100)}%`;
   zoomLabel.textContent = label;
   focusZoomLabel.textContent = label;
+  requestAnimationFrame(fitAllCanvases);
 }
 
 function setFocusMode(on) {
   document.body.classList.toggle("focus-mode", on);
   focusBar.hidden = !on;
   focusBtn.textContent = on ? t("focus.toggle.off") : t("focus.toggle.on");
-  requestAnimationFrame(() => {
-    fitCanvas();
+  requestAnimationFrame(fitAllCanvases);
+}
+
+function fitCanvasForPage(index) {
+  const entry = pageEls[index];
+  if (!entry) return;
+  const rect = entry.stage.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(1, Math.floor(rect.height));
+  if (entry.canvas.width !== width || entry.canvas.height !== height) {
+    entry.canvas.width = width;
+    entry.canvas.height = height;
+  }
+  const box = window.PdfEditorUI.contentBoxForObjectFitContain(entry.img, entry.canvas.width, entry.canvas.height);
+  pageControllers[index].setContentBox(box);
+  pageControllers[index].redraw();
+}
+
+function fitAllCanvases() {
+  pageEls.forEach((p, i) => {
+    if (p.loaded) fitCanvasForPage(i);
   });
 }
 
-function fitCanvas() {
-  const rect = stage.getBoundingClientRect();
-  const width = Math.max(1, Math.floor(rect.width / state.zoom));
-  const height = Math.max(1, Math.floor(rect.height / state.zoom));
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
-  const box = window.PdfEditorUI.contentBoxForObjectFitContain(preview, canvas.width, canvas.height);
-  editor.setContentBox(box);
-  editor.redraw();
+async function loadPageImage(index) {
+  const entry = pageEls[index];
+  if (!entry || entry.loaded) return;
+  entry.loaded = true;
+  await new Promise((resolve) => {
+    entry.img.onload = () => {
+      entry.img.classList.add("is-ready");
+      if (entry.img.naturalWidth && entry.img.naturalHeight) {
+        entry.stage.style.aspectRatio = `${entry.img.naturalWidth} / ${entry.img.naturalHeight}`;
+      }
+      fitCanvasForPage(index);
+      resolve();
+    };
+    entry.img.onerror = () => {
+      entry.loaded = false;
+      resolve();
+    };
+    entry.img.src = `/api/preview/${state.jobId}/${index}?dpi=160&t=${Date.now()}`;
+  });
 }
 
-function persistCurrentPage() {
-  state.editsByPage[state.pageIndex] = editor.getEdits();
+function reloadPageImage(index) {
+  const entry = pageEls[index];
+  if (!entry) return Promise.resolve();
+  entry.loaded = false;
+  entry.img.classList.remove("is-ready");
+  return loadPageImage(index);
 }
 
-function loadPageEdits() {
-  editor.setEdits(state.editsByPage[state.pageIndex] || emptyEdits());
-  const pageHits = state.searchHits.filter((h) => h.page_index === state.pageIndex);
-  editor.setSearchHits(pageHits);
+function setupLazyLoad() {
+  loadObserver?.disconnect();
+  loadObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        loadPageImage(Number(entry.target.dataset.page));
+      }
+    },
+    { root: viewport, rootMargin: "600px 0px", threshold: 0.01 }
+  );
+  pageEls.forEach((p) => loadObserver.observe(p.block));
+}
+
+function setupCurrentTracking() {
+  currentObserver?.disconnect();
+  const ratios = new Map();
+  currentObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) ratios.set(Number(entry.target.dataset.page), entry.intersectionRatio);
+      let best = state.pageIndex;
+      let bestRatio = -1;
+      for (const [idx, ratio] of ratios) {
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          best = idx;
+        }
+      }
+      if (best !== state.pageIndex) {
+        state.pageIndex = best;
+        syncPager();
+      }
+    },
+    { root: viewport, threshold: [0, 0.25, 0.5, 0.75, 1] }
+  );
+  pageEls.forEach((p) => currentObserver.observe(p.block));
+}
+
+async function scrollToPage(index) {
+  const entry = pageEls[index];
+  if (!entry) return;
+  entry.block.scrollIntoView({ behavior: "smooth", block: "start" });
+  state.pageIndex = index;
+  syncPager();
+  await loadPageImage(index);
+}
+
+function buildPages(data) {
+  pagesEl.innerHTML = "";
+  pageEls = [];
+  pageControllers = [];
+
+  data.pages.forEach((info, i) => {
+    const block = document.createElement("div");
+    block.className = "page-block";
+    block.dataset.page = String(i);
+
+    const stageDiv = document.createElement("div");
+    stageDiv.className = "stage";
+    if (info.width && info.height) {
+      stageDiv.style.aspectRatio = `${info.width} / ${info.height}`;
+    }
+
+    const img = document.createElement("img");
+    img.className = "page-preview";
+    img.alt = "";
+    img.draggable = false;
+
+    const canvasEl = document.createElement("canvas");
+    canvasEl.className = "page-canvas";
+    canvasEl.setAttribute("aria-label", t("a11y.draw_layer"));
+
+    stageDiv.append(img, canvasEl);
+    block.appendChild(stageDiv);
+    pagesEl.appendChild(block);
+
+    const controller = window.PdfEditorUI.createEditorController({
+      canvas: canvasEl,
+      getTool: () => state.tool,
+      getColor: () => penColor.value,
+      getWidthPx: () => Number(penWidth.value),
+      getStampKind: () => stampKind.value,
+      onChange: (edits) => {
+        if (controller.hasEdits(edits)) state.dirtyPages.add(i);
+        else state.dirtyPages.delete(i);
+      },
+    });
+
+    pageControllers.push(controller);
+    pageEls.push({ block, stage: stageDiv, img, canvas: canvasEl, loaded: false });
+  });
 }
 
 function renderThumbs() {
@@ -161,38 +273,25 @@ function renderThumbs() {
     btn.dataset.page = String(i);
     btn.innerHTML = `<img alt="${t("thumb.alt", { n: i + 1 })}" src="/api/preview/${state.jobId}/${i}?dpi=48&t=${Date.now()}" /><span>${i + 1}</span>`;
     btn.addEventListener("click", async () => {
-      if (i === state.pageIndex) return;
-      await changePage(i);
+      await scrollToPage(i);
     });
     thumbs.appendChild(btn);
   }
 }
 
-async function loadPreview() {
-  if (!state.jobId) return;
-  await new Promise((resolve, reject) => {
-    preview.onload = () => {
-      preview.classList.add("is-ready");
-      resolve();
-    };
-    preview.onerror = () => {
-      preview.classList.remove("is-ready");
-      preview.removeAttribute("src");
-      reject(new Error(t("status.preview_failed")));
-    };
-    preview.src = `/api/preview/${state.jobId}/${state.pageIndex}?dpi=160&t=${Date.now()}`;
-  });
-  syncPager();
-  applyZoom();
-  fitCanvas();
-  loadPageEdits();
+function applySearchHitsToPages(hits) {
+  const byPage = new Map();
+  for (const hit of hits) {
+    if (!byPage.has(hit.page_index)) byPage.set(hit.page_index, []);
+    byPage.get(hit.page_index).push(hit);
+  }
+  pageControllers.forEach((controller, idx) => controller.setSearchHits(byPage.get(idx) || []));
 }
 
 async function applyLoadedJob(data) {
   state.jobId = data.job_id;
   state.pageCount = data.page_count;
   state.pageIndex = 0;
-  state.editsByPage = {};
   state.dirtyPages = new Set();
   state.searchHits = [];
   state.searchCursor = -1;
@@ -200,11 +299,23 @@ async function applyLoadedJob(data) {
 
   fileName.textContent = data.filename;
   pageCountEl.textContent = String(data.page_count);
+  printFrom.max = String(data.page_count);
+  printTo.max = String(data.page_count);
+  printFrom.value = "1";
+  printTo.value = String(data.page_count);
   panel.hidden = false;
   document.body.classList.add("editing");
+
+  buildPages(data);
   renderThumbs();
+  setupLazyLoad();
+  setupCurrentTracking();
+  applyZoom();
+  syncPager();
   setStatus(t("status.tools_ready"));
-  await loadPreview();
+
+  viewport.scrollTop = 0;
+  await loadPageImage(0);
 }
 
 async function uploadFile(file) {
@@ -336,12 +447,6 @@ async function executeMerge(width, height) {
   await applyLoadedJob(await res.json());
 }
 
-async function changePage(nextIndex) {
-  persistCurrentPage();
-  state.pageIndex = nextIndex;
-  await loadPreview();
-}
-
 async function runSearch() {
   if (!state.jobId) return;
   const q = searchInput.value.trim();
@@ -349,7 +454,7 @@ async function runSearch() {
     state.searchHits = [];
     state.searchCursor = -1;
     searchCount.textContent = "0";
-    editor.setSearchHits([]);
+    applySearchHitsToPages([]);
     return;
   }
   const res = await fetch(`/api/search/${state.jobId}?q=${encodeURIComponent(q)}`);
@@ -361,11 +466,9 @@ async function runSearch() {
   state.searchHits = data.hits;
   state.searchCursor = data.hits.length ? 0 : -1;
   searchCount.textContent = String(data.count);
+  applySearchHitsToPages(data.hits);
   if (state.searchCursor >= 0) await jumpToSearchHit(state.searchCursor);
-  else {
-    editor.setSearchHits([]);
-    setStatus(t("status.search_empty"));
-  }
+  else setStatus(t("status.search_empty"));
 }
 
 async function jumpToSearchHit(index) {
@@ -373,10 +476,7 @@ async function jumpToSearchHit(index) {
   if (!hit) return;
   state.searchCursor = index;
   searchCount.textContent = `${index + 1}/${state.searchHits.length}`;
-  if (hit.page_index !== state.pageIndex) await changePage(hit.page_index);
-  else {
-    editor.setSearchHits(state.searchHits.filter((h) => h.page_index === state.pageIndex));
-  }
+  await scrollToPage(hit.page_index);
 }
 
 dropzone.addEventListener("dragover", (e) => {
@@ -393,16 +493,17 @@ fileInput.addEventListener("change", () => uploadFile(fileInput.files?.[0]));
 
 prevBtn.addEventListener("click", async () => {
   if (state.pageIndex <= 0) return;
-  await changePage(state.pageIndex - 1);
+  await scrollToPage(state.pageIndex - 1);
 });
 nextBtn.addEventListener("click", async () => {
   if (state.pageIndex >= state.pageCount - 1) return;
-  await changePage(state.pageIndex + 1);
+  await scrollToPage(state.pageIndex + 1);
 });
 
 document.querySelectorAll(".tool").forEach((btn) => {
   btn.addEventListener("click", () => {
-    state.tool = btn.dataset.tool;
+    const tool = btn.dataset.tool;
+    state.tool = state.tool === tool && tool !== "pan" ? "pan" : tool;
     syncToolUi();
   });
 });
@@ -416,19 +517,19 @@ stampKind.addEventListener("focus", () => {
   syncToolUi();
 });
 
-undoBtn.addEventListener("click", () => editor.undo());
-clearBtn.addEventListener("click", () => editor.clear());
+undoBtn.addEventListener("click", () => pageControllers[state.pageIndex]?.undo());
+clearBtn.addEventListener("click", () => pageControllers[state.pageIndex]?.clear());
 
 saveInkBtn.addEventListener("click", async () => {
   if (!state.jobId) return;
-  persistCurrentPage();
+  const dirtyIndices = [...state.dirtyPages];
 
-  const pages = [...state.dirtyPages]
+  const pages = dirtyIndices
     .map((pageIndex) => ({
       page_index: pageIndex,
-      ...(state.editsByPage[pageIndex] || emptyEdits()),
+      ...(pageControllers[pageIndex]?.getEdits() || emptyEdits()),
     }))
-    .filter((page) => editor.hasEdits(page));
+    .filter((page) => pageControllers[page.page_index]?.hasEdits(page));
 
   if (!pages.length) {
     setStatus(t("status.nothing_to_save"));
@@ -448,10 +549,10 @@ saveInkBtn.addEventListener("click", async () => {
       setStatus(err.detail || t("status.save_failed"));
       return;
     }
-    state.editsByPage = {};
     state.dirtyPages = new Set();
+    for (const idx of dirtyIndices) pageControllers[idx]?.clear();
     renderThumbs();
-    await loadPreview();
+    for (const idx of dirtyIndices) await reloadPageImage(idx);
     setStatus(t("status.saved"));
   } catch {
     setStatus(t("status.save_network"));
@@ -489,7 +590,6 @@ searchNext.addEventListener("click", async () => {
 function bumpZoom(delta) {
   state.zoom = Math.min(3, Math.max(0.5, state.zoom + delta));
   applyZoom();
-  fitCanvas();
 }
 
 zoomInBtn.addEventListener("click", () => bumpZoom(0.25));
@@ -508,25 +608,75 @@ document.addEventListener("keydown", (e) => {
 
 rotateBtn.addEventListener("click", async () => {
   if (!state.jobId) return;
-  persistCurrentPage();
+  const idx = state.pageIndex;
   const res = await fetch(`/api/rotate/${state.jobId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ page_index: state.pageIndex, degrees: 90 }),
+    body: JSON.stringify({ page_index: idx, degrees: 90 }),
   });
   if (!res.ok) {
     setStatus(t("status.rotate_failed"));
     return;
   }
-  state.editsByPage[state.pageIndex] = emptyEdits();
-  state.dirtyPages.delete(state.pageIndex);
+  pageControllers[idx]?.clear();
+  state.dirtyPages.delete(idx);
   renderThumbs();
-  await loadPreview();
+  await reloadPageImage(idx);
   setStatus(t("status.rotated"));
 });
 
 nightBtn.addEventListener("click", () => {
   document.body.classList.toggle("night");
+});
+
+copyTextBtn.addEventListener("click", async () => {
+  if (!state.jobId) return;
+  try {
+    const res = await fetch(`/api/text/${state.jobId}?page_index=${state.pageIndex}`);
+    if (!res.ok) {
+      setStatus(t("status.copy_failed"));
+      return;
+    }
+    const data = await res.json();
+    await navigator.clipboard.writeText(data.text);
+    setStatus(t("status.copied"));
+  } catch {
+    setStatus(t("status.copy_failed"));
+  }
+});
+
+printBtn.addEventListener("click", async () => {
+  if (!state.jobId) return;
+  const from = Math.max(1, Math.min(state.pageCount, Number(printFrom.value) || 1));
+  const to = Math.max(from, Math.min(state.pageCount, Number(printTo.value) || from));
+
+  setStatus(t("status.printing"));
+  try {
+    const res = await fetch(`/api/print/${state.jobId}?start=${from - 1}&end=${to - 1}`);
+    if (!res.ok) {
+      setStatus(t("status.print_failed"));
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    document.body.appendChild(iframe);
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      iframe.remove();
+    };
+    iframe.onload = () => {
+      const win = iframe.contentWindow;
+      win.onafterprint = cleanup;
+      win.focus();
+      win.print();
+      setTimeout(cleanup, 60000);
+    };
+    iframe.src = url;
+  } catch {
+    setStatus(t("status.print_network"));
+  }
 });
 
 let panning = false;
@@ -542,7 +692,7 @@ viewport.addEventListener("pointerdown", (e) => {
 });
 viewport.addEventListener("pointermove", (e) => {
   if (!panning) return;
-  window.scrollBy(panX - e.clientX, panY - e.clientY);
+  viewport.scrollBy(panX - e.clientX, panY - e.clientY);
   panX = e.clientX;
   panY = e.clientY;
 });
@@ -583,7 +733,7 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-window.addEventListener("resize", fitCanvas);
+window.addEventListener("resize", fitAllCanvases);
 
 document.getElementById("lang-select")?.addEventListener("change", async (e) => {
   await window.I18n.load(e.target.value);
@@ -591,7 +741,7 @@ document.getElementById("lang-select")?.addEventListener("change", async (e) => 
     focusBtn.textContent = t("focus.toggle.off");
   }
   if (state.jobId) renderThumbs();
-  editor.redraw();
+  pageControllers.forEach((c) => c.redraw());
 });
 
 document.addEventListener("i18n:changed", () => {
