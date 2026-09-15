@@ -112,6 +112,68 @@ def test_search_and_rotate(sample_pdf: Path):
     assert rotated.json()["ok"] is True
 
 
+def test_extract_text(sample_pdf: Path):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    res = client.get(f"/api/text/{job_id}", params={"page_index": 0})
+    assert res.status_code == 200
+    assert "hello pdf-utils" in res.json()["text"]
+
+    whole = client.get(f"/api/text/{job_id}")
+    assert whole.status_code == 200
+    assert "hello pdf-utils" in whole.json()["text"]
+
+
+def test_extract_text_out_of_range(sample_pdf: Path):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    res = client.get(f"/api/text/{job_id}", params={"page_index": 99})
+    assert res.status_code == 400
+
+
+def test_extract_text_job_not_found():
+    res = client.get("/api/text/does-not-exist")
+    assert res.status_code == 404
+
+
+def test_print_pages(multipage_pdf: Path):
+    with multipage_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("multi.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    res = client.get(f"/api/print/{job_id}", params={"start": 0, "end": 1})
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/pdf"
+
+
+def test_print_pages_defaults_end_to_start(multipage_pdf: Path):
+    with multipage_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("multi.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    res = client.get(f"/api/print/{job_id}", params={"start": 0})
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/pdf"
+
+
+def test_print_pages_invalid_range(sample_pdf: Path):
+    with sample_pdf.open("rb") as f:
+        up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})
+    job_id = up.json()["job_id"]
+
+    res = client.get(f"/api/print/{job_id}", params={"start": 0, "end": 5})
+    assert res.status_code == 400
+
+
+def test_print_pages_job_not_found():
+    res = client.get("/api/print/does-not-exist", params={"start": 0})
+    assert res.status_code == 404
+
+
 def test_convert_png(sample_pdf: Path):
     with sample_pdf.open("rb") as f:
         up = client.post("/api/upload", files={"file": ("sample.pdf", f, "application/pdf")})

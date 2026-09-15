@@ -68,6 +68,18 @@ class PdfEditor:
             out_doc.save(out_path, garbage=4, deflate=True)
         return out_path
 
+    def extract_pages(
+        self, pdf_path: Path, start_index: int, end_index: int, out_path: Path
+    ) -> Path:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with pymupdf.open(pdf_path) as doc:
+            if start_index < 0 or end_index >= len(doc) or start_index > end_index:
+                raise IndexError(f"invalid page range {start_index}-{end_index}")
+            with pymupdf.open() as out_doc:
+                out_doc.insert_pdf(doc, from_page=start_index, to_page=end_index)
+                out_doc.save(out_path, garbage=4, deflate=True)
+        return out_path
+
     def rotate_page(self, pdf_path: Path, page_index: int, degrees: int, out_path: Path) -> Path:
         if degrees not in (90, 180, 270, -90):
             raise ValueError("degrees must be 90, 180, 270, or -90")

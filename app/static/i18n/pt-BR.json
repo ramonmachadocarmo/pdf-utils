@@ -17,8 +17,12 @@
   "zoom.out": "Diminuir zoom",
   "zoom.in": "Aumentar zoom",
   "reader.rotate": "Girar 90°",
+  "reader.copy_text": "Copiar texto",
+  "reader.print": "Imprimir",
   "reader.night": "Noite",
   "reader.focus": "So visualizar",
+  "print.from": "De",
+  "print.to": "Ate",
   "a11y.tools": "Ferramentas",
   "tool.pen": "Caneta",
   "tool.highlight": "Destaque",
@@ -76,5 +80,10 @@
   "status.merge_select_two": "Selecione pelo menos dois arquivos PDF.",
   "status.merge_select_one": "Selecione ao menos mais um PDF para adicionar.",
   "status.merge_uploading": "Enviando arquivos…",
-  "status.merge_failed": "Falha ao concatenar."
+  "status.merge_failed": "Falha ao concatenar.",
+  "status.copied": "Texto da pagina copiado.",
+  "status.copy_failed": "Falha ao copiar o texto.",
+  "status.printing": "Preparando paginas para impressao…",
+  "status.print_failed": "Falha ao preparar as paginas para impressao.",
+  "status.print_network": "Erro de rede ao imprimir."
 }

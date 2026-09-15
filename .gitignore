@@ -27,6 +27,7 @@ storage/**
 Thumbs.db
 .idea/
 .vscode/
+.claude/
 *.swp
 
 # Screenshot tooling (local only)

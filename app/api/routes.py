@@ -291,6 +291,35 @@ async def search(job_id: str, q: str = ""):
     }
 
 
+@router.get("/text/{job_id}")
+async def extract_text(job_id: str, page_index: int | None = None):
+    pdf_path = _pdf_path(job_id)
+    if not pdf_path.exists():
+        raise HTTPException(404, "job not found")
+
+    try:
+        text = reader.extract_text(pdf_path, page_index)
+    except IndexError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    return {"text": text}
+
+
+@router.get("/print/{job_id}")
+async def print_pages(job_id: str, start: int, end: int | None = None):
+    pdf_path = _pdf_path(job_id)
+    if not pdf_path.exists():
+        raise HTTPException(404, "job not found")
+
+    out_path = OUTPUTS / job_id / "print.pdf"
+    try:
+        editor.extract_pages(pdf_path, start, end if end is not None else start, out_path)
+    except IndexError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    return FileResponse(out_path, media_type="application/pdf", filename="print.pdf")
+
+
 @router.post("/annotate/{job_id}")
 async def annotate(job_id: str, body: AnnotateBody):
     pdf_path = _pdf_path(job_id)

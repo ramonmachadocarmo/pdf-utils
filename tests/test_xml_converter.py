@@ -40,6 +40,13 @@ def test_convert_paginates_large_documents(tmp_path: Path):
 
     with pymupdf.open(out) as doc:
         assert len(doc) > 1
+        full_text = "".join(page.get_text() for page in doc)
+    # Regression guard: mupdf's Story engine silently stops paginating (reporting
+    # a page as complete while later content overflows off-page, undetected) once
+    # a repeated-content document needs several pages, if any element sets an
+    # explicit font-size. Check the tail item actually made it onto a page.
+    assert "value 0" in full_text
+    assert "value 1999" in full_text
 
 
 def test_convert_truncates_huge_text_node(tmp_path: Path):
@@ -55,6 +62,14 @@ def test_convert_truncates_huge_text_node(tmp_path: Path):
     with pymupdf.open(out) as doc:
         assert len(doc) >= 1
         assert "truncated" in doc[0].get_text()
+
+
+def test_css_has_no_font_size_overrides():
+    # font-size on any selector reintroduces the silent-pagination-truncation bug
+    # covered by test_convert_paginates_large_documents (see its comment).
+    from app.services.xml_converter import _CSS
+
+    assert "font-size" not in _CSS
 
 
 def test_convert_rejects_malformed_xml(tmp_path: Path):
